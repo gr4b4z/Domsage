@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pl" x-data="stats()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent — Panel admina</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.x.x/dist/chart.umd.min.js"></script>
+  <style>[x-cloak]{display:none}</style>
+</head>
+<body class="bg-gray-50 min-h-screen" x-cloak>
+  <header class="bg-white border-b px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">📊</span>
+      <div><h1 class="font-bold text-gray-800">Panel admina</h1><p class="text-xs text-gray-400">Agent Platform</p></div>
+    </div>
+    <div class="flex items-center gap-3">
+      <select x-model="days" @change="load()" class="text-sm border rounded-lg px-3 py-1.5">
+        <option value="7">Ostatnie 7 dni</option><option value="30" selected>Ostatnie 30 dni</option><option value="90">Ostatnie 90 dni</option>
+      </select>
+      <a href="/" class="text-sm text-indigo-600 hover:underline">← Czat</a>
+    </div>
+  </header>
+
+  <div x-show="error" class="flex items-center justify-center min-h-96">
+    <div class="text-center"><div class="text-4xl mb-3">🔒</div><p class="text-gray-600" x-text="error"></p></div>
+  </div>
+
+  <div x-show="data && !error" class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <template x-for="card in summaryCards()">
+        <div class="bg-white rounded-xl border p-4">
+          <div class="text-2xl mb-1" x-text="card.icon"></div>
+          <div class="text-2xl font-bold" :class="card.color" x-text="card.value"></div>
+          <div class="text-xs text-gray-500 mt-1" x-text="card.label"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="bg-white rounded-xl border p-6">
+      <h2 class="font-semibold text-gray-800 mb-4">💰 Koszt LLM dzienny (USD)</h2>
+      <canvas id="costChart" height="100"></canvas>
+    </div>
+
+    <div class="bg-white rounded-xl border p-6">
+      <h2 class="font-semibold text-gray-800 mb-4">🔧 Wydajność narzędzi</h2>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Tool</th><th class="pb-2 text-right">Wywołania</th><th class="pb-2 text-right">Sukces</th><th class="pb-2 text-right">Błędy</th><th class="pb-2 text-right">Śr. koszt</th></tr></thead>
+        <tbody>
+          <template x-for="t in data.toolStats">
+            <tr class="border-b last:border-0">
+              <td class="py-2 font-mono text-xs text-gray-600" x-text="t.toolId"></td>
+              <td class="py-2 text-right" x-text="t.totalCalls"></td>
+              <td class="py-2 text-right"><span :class="successRate(t) > 95 ? 'text-green-600' : 'text-amber-600'" x-text="successRate(t).toFixed(1) + '%'"></span></td>
+              <td class="py-2 text-right" :class="t.failures > 0 ? 'text-red-500' : 'text-gray-400'" x-text="t.failures"></td>
+              <td class="py-2 text-right text-gray-500" x-text="'$' + (t.avgCostUsd||0).toFixed(5)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="bg-white rounded-xl border p-6">
+      <h2 class="font-semibold text-gray-800 mb-4">🎯 Jakość intentów</h2>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Intent</th><th class="pb-2 text-right">Łącznie</th><th class="pb-2 text-right">✅</th><th class="pb-2 text-right">✏️</th><th class="pb-2 text-right">❌</th></tr></thead>
+        <tbody>
+          <template x-for="i in data.intentQuality">
+            <tr class="border-b last:border-0">
+              <td class="py-2 font-mono text-xs text-gray-600" x-text="i.intent"></td>
+              <td class="py-2 text-right" x-text="i.total"></td>
+              <td class="py-2 text-right text-green-600" x-text="i.accepted || '—'"></td>
+              <td class="py-2 text-right" :class="i.corrected > 0 ? 'text-amber-600' : 'text-gray-400'" x-text="i.corrected || '—'"></td>
+              <td class="py-2 text-right text-gray-400" x-text="i.cancelled || '—'"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+<script>
+function stats() {
+  return {
+    apiKey: null, days: 30, data: null, error: null, chart: null,
+    async init() {
+      const key = new URLSearchParams(window.location.hash.slice(1)).get('key') || sessionStorage.getItem('agentKey');
+      if (!key) { this.error = 'Brak klucza dostępu.'; return; }
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const me = await fetch('/api/me', { headers: { 'X-Api-Key': key } });
+          if (me.ok) {
+            const session = await me.json();
+            if (!session.isAdmin) { this.error = 'Brak dostępu do panelu admina.'; return; }
+            this.apiKey = key; sessionStorage.setItem('agentKey', key); await this.load();
+            return;
+          }
+          if (me.status === 401 || me.status === 403) { this.error = 'Nieprawidłowy klucz.'; return; }
+        } catch { /* network error — retry */ }
+        await new Promise(r => setTimeout(r, 500));
+      }
+      this.error = 'Nie udało się połączyć z serwerem.';
+    },
+    async load() {
+      const res = await fetch(`/admin/stats?days=${this.days}`, { headers: { 'X-Api-Key': this.apiKey } });
+      if (res.status === 403) { this.error = 'Brak dostępu do panelu admina.'; return; }
+      this.data = await res.json(); this.$nextTick(() => this.renderChart());
+    },
+    summaryCards() {
+      if (!this.data) return [];
+      const s = this.data.summary;
+      return [
+        { icon: '💰', value: '$' + s.totalCostUsd.toFixed(4), label: `Koszt LLM (${this.days}d)`, color: s.totalCostUsd > 5 ? 'text-red-600' : 'text-gray-900' },
+        { icon: '🤖', value: s.totalLlmCalls.toLocaleString('pl'), label: 'Wywołania LLM', color: 'text-gray-900' },
+        { icon: '⚡', value: s.totalActions.toLocaleString('pl'), label: 'Akcje agenta', color: 'text-gray-900' },
+        { icon: '✅', value: s.successRate.toFixed(1) + '%', label: 'Wskaźnik sukcesu', color: s.successRate > 95 ? 'text-green-600' : 'text-amber-600' },
+      ];
+    },
+    successRate(t) { return t.totalCalls === 0 ? 0 : (t.successes / t.totalCalls) * 100; },
+    renderChart() {
+      const canvas = document.getElementById('costChart'); if (!canvas || !this.data?.llmDaily) return;
+      const byDay = {}; for (const r of this.data.llmDaily) byDay[r.day] = (byDay[r.day] || 0) + r.costUsd;
+      const labels = Object.keys(byDay).sort(); const values = labels.map(d => byDay[d] || 0);
+      if (this.chart) this.chart.destroy();
+      this.chart = new Chart(canvas, { type: 'bar', data: { labels, datasets: [{ label: 'Koszt USD', data: values, backgroundColor: 'rgba(99,102,241,0.6)', borderColor: 'rgb(99,102,241)', borderWidth: 1, borderRadius: 4 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+    }
+  };
+}
+</script>
+</body>
+</html>

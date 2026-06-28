@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl" x-data="shop()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista zakupów</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <style>[x-cloak]{display:none}</style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col max-w-md mx-auto" x-cloak>
+  <header class="bg-white border-b px-4 py-3 flex items-center justify-between shadow-sm sticky top-0">
+    <div class="flex items-center gap-2"><span class="text-xl">🛒</span><span class="font-semibold text-gray-800">Lista zakupów</span></div>
+    <a href="/" class="text-sm text-indigo-600 hover:underline">Czat →</a>
+  </header>
+
+  <div x-show="error" class="flex-1 flex items-center justify-center p-8 text-center">
+    <div><div class="text-4xl mb-2">🔑</div><p class="text-gray-600" x-text="error"></p></div>
+  </div>
+
+  <div x-show="!error" class="flex-1 overflow-y-auto p-3 space-y-2">
+    <template x-if="needed().length === 0 && bought().length === 0">
+      <p class="text-center text-gray-400 py-10">Lista jest pusta. Dodaj coś poniżej 👇</p>
+    </template>
+    <template x-for="i in needed()" :key="i.id">
+      <button @click="check(i)"
+        class="w-full flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-4 text-left active:bg-green-50 hover:border-green-300 transition">
+        <span class="w-6 h-6 rounded-full border-2 border-gray-300 flex-shrink-0"></span>
+        <span class="flex-1 text-gray-800" x-text="i.name + (i.quantity ? ' ('+i.quantity+')' : '')"></span>
+      </button>
+    </template>
+    <template x-if="bought().length > 0"><div class="pt-2 text-xs text-gray-400 px-1">Kupione</div></template>
+    <template x-for="i in bought()" :key="i.id">
+      <button @click="uncheck(i)" class="w-full flex items-center gap-3 bg-white/60 border border-gray-100 rounded-xl px-4 py-3 text-left">
+        <span class="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center flex-shrink-0 text-sm">✓</span>
+        <span class="flex-1 text-gray-400 line-through" x-text="i.name"></span>
+        <span class="text-xs text-gray-400" x-show="i.boughtBy" x-text="i.boughtBy"></span>
+      </button>
+    </template>
+  </div>
+
+  <div x-show="!error" class="bg-white border-t p-3 flex gap-2 sticky bottom-0">
+    <input x-model="newItem" @keydown.enter="add()" placeholder="Dodaj produkt…"
+      class="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-400" />
+    <button @click="add()" :disabled="!newItem.trim()" class="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white rounded-xl px-4 font-medium">Dodaj</button>
+  </div>
+
+<script>
+function shop() {
+  return {
+    apiKey: null, error: null, items: [], newItem: '',
+    needed() { return this.items.filter(i => i.status === 'needed'); },
+    bought() { return this.items.filter(i => i.status === 'bought'); },
+    // Generic deterministic action — core has no shopping knowledge.
+    async action(tool, input) {
+      const r = await fetch('/api/action', { method:'POST',
+        headers:{'Content-Type':'application/json','X-Api-Key':this.apiKey},
+        body: JSON.stringify({ tool, input: input || {} }) });
+      return r.ok ? r.json() : null;
+    },
+    async init() {
+      const key = new URLSearchParams(location.hash.slice(1)).get('key') || sessionStorage.getItem('agentKey');
+      if (!key) { this.error = 'Brak klucza dostępu.'; return; }
+      for (let a = 0; a < 4; a++) {
+        try {
+          const me = await fetch('/api/me', { headers: { 'X-Api-Key': key } });
+          if (me.ok) { this.apiKey = key; sessionStorage.setItem('agentKey', key); break; }
+          if (me.status === 401 || me.status === 403) { this.error = 'Nieprawidłowy klucz.'; return; }
+        } catch {}
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (!this.apiKey) { this.error = 'Nie udało się połączyć.'; return; }
+      await this.load();
+      this.connect();
+    },
+    async load() {
+      const res = await this.action('family.shopping.board', {});
+      if (res && res.data && res.data.items) this.items = res.data.items;
+    },
+    async check(i) { i.status = 'bought'; try { await this.action('family.shopping.check', { itemId: i.id }); } finally { this.load(); } },
+    async uncheck(i) { i.status = 'needed'; try { await this.action('family.shopping.uncheck', { itemId: i.id }); } finally { this.load(); } },
+    async add() { const n = this.newItem.trim(); if (!n) return; this.newItem = ''; try { await this.action('family.shopping.add', { name: n }); } finally { this.load(); } },
+    connect() { try { const es = new EventSource('/api/stream?key=' + encodeURIComponent(this.apiKey)); es.onmessage = () => this.load(); } catch {} }
+  };
+}
+</script>
+</body>
+</html>

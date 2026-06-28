@@ -1,0 +1,260 @@
+using AgentPlatform.Core.Audit;
+using AgentPlatform.Core.Budget;
+using AgentPlatform.Core.Contracts;
+using AgentPlatform.Core.Registry;
+using AgentPlatform.PluginSdk.Contracts;
+using AgentPlatform.PluginSdk.Contracts.Models;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace AgentPlatform.Core.Pipeline;
+
+/// <summary>Central orchestrator. One instance per message (Scoped).</summary>
+public sealed class AgentPipeline(
+    PluginRegistry registry,
+    IUserRepository userRepo,
+    IExecutionContextAccessor execAccessor,
+    ConversationResolver convResolver,
+    IntentRouter intentRouter,
+    ContextBuilder contextBuilder,
+    Planner planner,
+    ActionValidator validator,
+    ToolExecutor toolExecutor,
+    ResponseBuilder responseBuilder,
+    ConversationWriter convWriter,
+    IPendingIntentRepository pendingIntents,
+    IPendingConfirmationRepository pendingConfirmations,
+    IServiceProvider sp,
+    ILogger<AgentPipeline> log)
+{
+    public async Task RunAsync(RawEvent rawEvent, CancellationToken ct)
+    {
+        var requestId = Guid.NewGuid().ToString();
+        var started = DateTimeOffset.UtcNow;
+        PipelineRunResult? runResult = null;
+        ExecutionContext? ctx = null;
+        var lastIntent = "unknown";
+
+        try
+        {
+            var channel = registry.GetChannel(rawEvent.ChannelId);
+            var msg = await channel.ParseAsync(rawEvent, ct);
+
+            var userInfo = await ResolveUserAsync(msg, ct);
+            if (userInfo is null)
+            {
+                await channel.DeliverAsync(new OutputMessage(msg.ChannelId, msg.UserId,
+                    "Nieznany użytkownik. Skontaktuj się z administratorem.", false, null, null)
+                { RequestId = msg.MessageId }, ct);
+                runResult = ErrorResult(requestId, msg, "unknown user", started);
+                return;
+            }
+
+            var convCtx = await convResolver.ResolveAsync(msg, ct);
+
+            ctx = new ExecutionContext(
+                RequestId: requestId, UserId: userInfo.UserId, GroupId: userInfo.GroupId,
+                GroupType: userInfo.GroupType, UserRole: userInfo.Role, ChannelId: msg.ChannelId,
+                ConversationId: convCtx.ConversationId, IsIncognito: convCtx.IsIncognito,
+                StartedAt: started);
+            execAccessor.Current = ctx;
+
+            // 5a. Confirmation callback?
+            if (msg.Text.StartsWith("confirm:", StringComparison.OrdinalIgnoreCase) ||
+                msg.Text.StartsWith("cancel:", StringComparison.OrdinalIgnoreCase))
+            {
+                var resp = await HandleConfirmationAsync(msg, ctx, ct);
+                await DeliverAndWriteAsync(channel, msg, resp, ctx, ct);
+                runResult = OkResult(requestId, ctx, "confirmation", resp, started);
+                return;
+            }
+
+            // 5b. Pending clarify intent?
+            var pending = await pendingIntents.GetActiveAsync(ctx.UserId, ct);
+            if (pending is not null)
+            {
+                await pendingIntents.ClearAsync(pending.Id, ct);
+                // Re-route the answer as a fresh message (simple resume strategy).
+            }
+
+            // 6. Route
+            var matches = await intentRouter.ClassifyAsync(msg, ctx, ct);
+
+            // 7. Execute each intent sequentially
+            var responses = new List<ResponseResult>();
+            foreach (var match in matches)
+            {
+                lastIntent = match.IntentId;
+                if (match.IntentId == "clarify")
+                {
+                    var clarifyText = await planner.BuildClarifyQuestionAsync(match, ctx, ct);
+                    await pendingIntents.SaveAsync(new PendingIntent(
+                        ctx.UserId, ctx.GroupId,
+                        match.MissingSlots.FirstOrDefault() ?? "clarify",
+                        new Dictionary<string, string>(), match.MissingSlots), ct);
+                    responses.Add(new ResponseResult(clarifyText, false, null, null));
+                    continue;
+                }
+                if (match.IntentId == "fallback" || !registry.TryGetHandler(match.IntentId, out _))
+                {
+                    responses.Add(new ResponseResult(
+                        "Nie rozumiem tej prośby. Spróbuj inaczej.", false, null, null));
+                    continue;
+                }
+
+                try
+                {
+                    responses.Add(await ExecuteSingleIntentAsync(match, msg, ctx, ct));
+                }
+                catch (BudgetExceededException ex)
+                {
+                    responses.Add(new ResponseResult($"⚠️ Limit budżetu osiągnięty: {ex.Message}", false, null, null));
+                }
+                catch (SecurityViolationException ex)
+                {
+                    log.LogWarning(ex, "Security violation in intent {Intent}", match.IntentId);
+                    responses.Add(new ResponseResult("⛔ Brak uprawnień do tej akcji.", false, null, null));
+                }
+                catch (RetryableToolException)
+                {
+                    responses.Add(new ResponseResult("⏳ Akcja tymczasowo niedostępna, spróbuj ponownie.", false, null, null));
+                }
+                catch (TerminalToolException ex)
+                {
+                    responses.Add(new ResponseResult($"❌ Błąd: {ex.UserMessage}", false, null, null));
+                }
+                catch (ToolInputValidationException ex)
+                {
+                    log.LogWarning(ex, "Tool input validation failed for intent {Intent}", match.IntentId);
+                    responses.Add(new ResponseResult(
+                        "Nie mam wszystkich potrzebnych informacji. Doprecyzuj proszę szczegóły.", false, null, null));
+                }
+                catch (Exception ex)
+                {
+                    log.LogError(ex, "Unexpected error executing intent {Intent}", match.IntentId);
+                    responses.Add(new ResponseResult("❌ Wystąpił błąd przy realizacji tej prośby.", false, null, null));
+                }
+            }
+
+            var combined = CombineResponses(responses);
+            await DeliverAndWriteAsync(channel, msg, combined, ctx, ct);
+            runResult = OkResult(requestId, ctx, lastIntent, combined, started);
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex, "Pipeline failed for request {RequestId}", requestId);
+            runResult = new PipelineRunResult(requestId, ctx?.UserId ?? "", ctx?.GroupId,
+                rawEvent.ChannelId, lastIntent, PipelineRunStatus.Failed, null, null, ex.Message,
+                0, 0, 0m, DateTimeOffset.UtcNow - started, DateTimeOffset.UtcNow);
+        }
+        finally
+        {
+            BudgetEnforcer.Clear(requestId);
+            if (runResult is not null)
+            {
+                var hooks = sp.GetServices<IPipelineHook>();
+                await Task.WhenAll(hooks.Select(async h =>
+                {
+                    try { await h.OnCompletedAsync(runResult, CancellationToken.None); }
+                    catch (Exception ex) { log.LogError(ex, "Hook {Hook} failed", h.GetType().Name); }
+                }));
+            }
+        }
+    }
+
+    private async Task<ResponseResult> ExecuteSingleIntentAsync(
+        IntentMatch match, InputMessage msg, ExecutionContext ctx, CancellationToken ct)
+    {
+        var handler = registry.GetHandler(match.IntentId);
+        var agentCtx = await contextBuilder.FetchAsync(
+            new ContextRequest(ctx, match.IntentId, match.RawSegment), handler, ct);
+        var plan = await planner.PlanAsync(msg with { Text = match.RawSegment }, handler, agentCtx, ctx, ct);
+
+        if (plan.Intent == "clarify")
+        {
+            var clarifyText = await planner.BuildClarifyQuestionAsync(match, ctx, ct);
+            return new ResponseResult(clarifyText, false, null, null);
+        }
+
+        var validated = await validator.ValidateAsync(plan, handler, ctx, ct);
+        if (validated.Rejected)
+            return new ResponseResult(validated.RejectionReason ?? "Akcja odrzucona.", false, null, null);
+
+        if (validated.RequiresConfirmation)
+        {
+            var confId = await pendingConfirmations.SaveAsync(validated.Plan, ctx, ct);
+            return new ResponseResult(validated.ConfirmationPrompt!, true, confId, ["✅ Tak", "❌ Anuluj"]);
+        }
+
+        var toolResult = await toolExecutor.ExecuteAsync(validated.Plan, ctx, ct);
+        return await responseBuilder.BuildAsync(toolResult, validated.Plan, ctx, ct);
+    }
+
+    private async Task<ResponseResult> HandleConfirmationAsync(
+        InputMessage msg, ExecutionContext ctx, CancellationToken ct)
+    {
+        var parts = msg.Text.Split(':', 2);
+        var confirmed = parts[0].Equals("confirm", StringComparison.OrdinalIgnoreCase);
+        var confId = parts.Length > 1 ? parts[1] : msg.Text;
+
+        var pending = await pendingConfirmations.GetAsync(confId, ct);
+        if (pending is null)
+            return new ResponseResult("❓ Nie znalazłem potwierdzenia. Może wygasło?", false, null, null);
+
+        await pendingConfirmations.RecordSignalAsync(confId, confirmed ? "accepted" : "cancelled", null, ct);
+
+        if (!confirmed)
+        {
+            await pendingConfirmations.ExpireAsync(confId, ct);
+            return new ResponseResult("↩️ Anulowano.", false, null, null);
+        }
+
+        var toolResult = await toolExecutor.ExecuteAsync(pending.Plan, ctx, ct);
+        return await responseBuilder.BuildAsync(toolResult, pending.Plan, ctx, ct);
+    }
+
+    private async Task<UserGroupInfo?> ResolveUserAsync(InputMessage msg, CancellationToken ct) =>
+        msg.ChannelId switch
+        {
+            "telegram" => long.TryParse(msg.UserId, out var tid)
+                ? await userRepo.GetByTelegramIdAsync(tid, ct) : null,
+            "signal" => await userRepo.GetBySignalNumberAsync(msg.UserId, ct),
+            "email" => await userRepo.GetByEmailAsync(msg.UserId, ct),
+            _ => await userRepo.GetPrimaryGroupAsync(msg.UserId, ct)
+        };
+
+    private static ResponseResult CombineResponses(List<ResponseResult> responses)
+    {
+        if (responses.Count == 0) return new ResponseResult("…", false, null, null);
+        if (responses.Count == 1) return responses[0];
+        var text = string.Join("\n\n", responses.Select(r => r.Text));
+        var conf = responses.FirstOrDefault(r => r.RequiresConfirmation);
+        return new ResponseResult(text, conf is not null, conf?.ConfirmationId, conf?.Actions);
+    }
+
+    private async Task DeliverAndWriteAsync(IChannelPlugin channel, InputMessage msg,
+        ResponseResult response, ExecutionContext ctx, CancellationToken ct)
+    {
+        await channel.DeliverAsync(new OutputMessage(msg.ChannelId, msg.UserId, response.Text,
+            response.RequiresConfirmation, response.ConfirmationId, response.Actions)
+        { RequestId = msg.MessageId }, ct);
+
+        await convWriter.WriteAsync(ctx.ConversationId, ctx.IsIncognito,
+            msg.Text, response.Text, intent: null, actionSummary: null, tokens: 0, ct);
+    }
+
+    private static PipelineRunResult OkResult(string requestId, ExecutionContext ctx, string intent,
+        ResponseResult resp, DateTimeOffset started)
+    {
+        var status = ctx.IsIncognito ? PipelineRunStatus.Incognito
+            : resp.RequiresConfirmation ? PipelineRunStatus.Clarify
+            : PipelineRunStatus.Success;
+        return new PipelineRunResult(requestId, ctx.UserId, ctx.GroupId, ctx.ChannelId, intent,
+            status, null, null, null, 0, 0, 0m, DateTimeOffset.UtcNow - started, DateTimeOffset.UtcNow);
+    }
+
+    private static PipelineRunResult ErrorResult(string requestId, InputMessage msg, string error,
+        DateTimeOffset started) =>
+        new(requestId, msg.UserId, msg.GroupId, msg.ChannelId, "unknown", PipelineRunStatus.Rejected,
+            null, null, error, 0, 0, 0m, DateTimeOffset.UtcNow - started, DateTimeOffset.UtcNow);
+}

@@ -1,0 +1,9 @@
+[
+  { "input": "zapłaciłem rachunek za gaz", "expectedIntent": "family.mark_payment_paid", "minConfidence": 0.7 },
+  { "input": "oznacz prąd jako zapłacony", "expectedIntent": "family.mark_payment_paid", "minConfidence": 0.7 },
+  { "input": "dodaj nowy rachunek za internet 89 zł", "expectedIntent": "family.add_payment", "minConfidence": 0.7 },
+  { "input": "mam do zapłaty fakturę PGNiG 120 zł do 15 lipca", "expectedIntent": "family.add_payment", "minConfidence": 0.7 },
+  { "input": "dodaj zadanie: wynieść śmieci", "expectedIntent": "family.add_task", "minConfidence": 0.7 },
+  { "input": "przypomnij o wizycie u dentysty", "expectedIntent": "family.add_task", "minConfidence": 0.6 },
+  { "input": "zrobiłem już pranie", "expectedIntent": "family.mark_task_done", "minConfidence": 0.6 }
+]

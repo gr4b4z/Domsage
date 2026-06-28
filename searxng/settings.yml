@@ -1,0 +1,9 @@
+use_default_settings: true
+server:
+  secret_key: "change-me-in-production"
+search:
+  safe_search: 1
+  default_lang: "pl"
+  formats:
+    - html
+    - json

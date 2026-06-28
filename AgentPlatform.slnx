@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/sdk/">
+    <Project Path="sdk/AgentPlatform.PluginSdk/AgentPlatform.PluginSdk.csproj" />
+  </Folder>
+  <Folder Name="/src-tools/">
+    <Project Path="src-tools/AgentPlatform.Setup/AgentPlatform.Setup.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/AgentPlatform.Api/AgentPlatform.Api.csproj" />
+    <Project Path="src/AgentPlatform.Core/AgentPlatform.Core.csproj" />
+    <Project Path="src/AgentPlatform.Infrastructure/AgentPlatform.Infrastructure.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Business/AgentPlatform.Plugins.Business.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Email/AgentPlatform.Plugins.Email.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Family/AgentPlatform.Plugins.Family.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Http/AgentPlatform.Plugins.Http.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Signal/AgentPlatform.Plugins.Signal.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Telegram/AgentPlatform.Plugins.Telegram.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.WebSearch/AgentPlatform.Plugins.WebSearch.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgentPlatform.Core.Tests/AgentPlatform.Core.Tests.csproj" />
+    <Project Path="tests/AgentPlatform.Eval/AgentPlatform.Eval.csproj" />
+    <Project Path="tests/AgentPlatform.Integration.Tests/AgentPlatform.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

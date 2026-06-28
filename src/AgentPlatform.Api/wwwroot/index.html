@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pl" x-data="chat()" x-init="init()">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mój Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <style>
+    [x-cloak] { display: none; }
+    .bubble-agent { border-radius: 18px 18px 18px 4px; }
+    .bubble-user  { border-radius: 18px 18px 4px 18px; }
+    .dot-flashing::after { content: '●●●'; letter-spacing: 4px; animation: dots 1.2s infinite; }
+    @keyframes dots { 0%,100% { opacity: .2 } 50% { opacity: 1 } }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col max-w-2xl mx-auto">
+  <header class="bg-white border-b px-4 py-3 flex items-center gap-3 shadow-sm">
+    <div class="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white text-lg">🤖</div>
+    <div>
+      <div class="font-semibold text-gray-800">Mój Agent</div>
+      <div class="text-xs text-green-500" x-show="apiKey && !isInvite" x-text="userName ? `Cześć, ${userName}` : 'Online'"></div>
+      <div class="text-xs text-gray-400" x-show="!apiKey || isInvite">Łączenie...</div>
+    </div>
+    <div class="ml-auto flex gap-2">
+      <template x-for="p in plugins" :key="p.pluginId">
+        <a :href="p.url + '#key=' + apiKey"
+           class="text-sm bg-indigo-50 text-indigo-600 rounded-full px-3 py-1.5 hover:bg-indigo-100 transition"
+           x-text="p.icon + ' ' + p.title"></a>
+      </template>
+    </div>
+  </header>
+
+  <div x-show="!apiKey" x-cloak class="flex-1 flex items-center justify-center p-8">
+    <div class="text-center max-w-sm">
+      <div class="text-5xl mb-4">🔑</div>
+      <h2 class="text-xl font-semibold text-gray-800 mb-2">Brak dostępu</h2>
+      <p class="text-gray-500 text-sm mb-6">Użyj linku wygenerowanego podczas konfiguracji lub otrzymanego od osoby zarządzającej.</p>
+      <p class="text-xs text-gray-400">Przykład: http://localhost:8080/#key=twoj-klucz</p>
+    </div>
+  </div>
+
+  <div x-show="apiKey && isInvite" x-cloak class="flex-1 flex items-center justify-center p-8">
+    <div class="text-center max-w-sm w-full">
+      <div class="text-5xl mb-4">👋</div>
+      <h2 class="text-xl font-semibold text-gray-800 mb-2">Witaj w rodzinnym agencie!</h2>
+      <p class="text-gray-500 text-sm mb-6">Jak masz na imię?</p>
+      <input x-model="inviteName" type="text" placeholder="Twoje imię"
+        class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-lg focus:outline-none focus:border-indigo-400 mb-4" />
+      <button @click="completeInvite()" :disabled="!inviteName.trim()"
+        class="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white rounded-xl py-3 font-medium transition">Zaczynamy →</button>
+    </div>
+  </div>
+
+  <div x-show="apiKey && !isInvite" x-cloak class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3" x-ref="messages">
+      <template x-if="messages.length === 0">
+        <div class="text-center py-8">
+          <div class="text-4xl mb-3">👋</div>
+          <p class="text-gray-500 text-sm">Cześć! W czym mogę pomóc?</p>
+          <div class="flex flex-wrap gap-2 justify-center mt-4">
+            <template x-for="hint in hints">
+              <button @click="sendText(hint)" class="text-xs bg-white border border-gray-200 rounded-full px-3 py-1.5 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition">
+                <span x-text="hint"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+      <template x-for="msg in messages" :key="msg.id">
+        <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+          <div class="max-w-xs lg:max-w-md">
+            <div x-show="msg.role === 'agent'" class="bubble-agent bg-white border border-gray-200 px-4 py-3 shadow-sm">
+              <p class="text-gray-800 text-sm whitespace-pre-wrap" x-text="msg.text"></p>
+              <div x-show="msg.confirmation" class="flex gap-2 mt-3">
+                <button @click="confirm(msg.confirmationId, true)" class="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm py-2 rounded-xl font-medium transition">✅ Tak</button>
+                <button @click="confirm(msg.confirmationId, false)" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm py-2 rounded-xl font-medium transition">❌ Anuluj</button>
+              </div>
+            </div>
+            <div x-show="msg.role === 'user'" class="bubble-user bg-indigo-500 px-4 py-3">
+              <p class="text-white text-sm" x-text="msg.text"></p>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div x-show="loading" class="flex justify-start">
+        <div class="bubble-agent bg-white border border-gray-200 px-4 py-3 shadow-sm">
+          <span class="dot-flashing text-gray-400 text-xs"></span>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white border-t px-4 py-3">
+      <div class="flex items-end gap-3">
+        <textarea x-model="input" @keydown.enter.prevent="!$event.shiftKey && send()" :disabled="loading"
+          placeholder="Napisz wiadomość..." rows="1"
+          class="flex-1 resize-none rounded-2xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-400 disabled:opacity-50 max-h-32" x-ref="input"></textarea>
+        <button @click="send()" :disabled="loading || !input.trim()"
+          class="w-10 h-10 rounded-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white flex items-center justify-center transition flex-shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+<script>
+function chat() {
+  return {
+    apiKey: null, userName: '', isInvite: false, messages: [], input: '', loading: false, inviteName: '', plugins: [],
+    hints: ['Co mam dzisiaj do zapłacenia?', 'Dodaj mleko do listy zakupów', 'Jakie mam przypomnienia?', 'Zapłaciłem rachunek za gaz'],
+    async init() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const key = params.get('key') || sessionStorage.getItem('agentKey');
+      if (!key) return;
+      // Retry transient failures (server still warming up / network blip). A 401 is a real
+      // bad key — stop immediately. Only network errors / 5xx are retried.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const res = await fetch('/api/me', { headers: { 'X-Api-Key': key } });
+          if (res.ok) {
+            const me = await res.json();
+            this.apiKey = key; this.userName = me.name; this.isInvite = me.isInvite;
+            sessionStorage.setItem('agentKey', key);
+            if (!me.isInvite) { this.connectStream(key); this.loadPlugins(key); }
+            return;
+          }
+          if (res.status === 401 || res.status === 403) { this.apiKey = null; return; }
+        } catch { /* network error — retry */ }
+        await new Promise(r => setTimeout(r, 500));
+      }
+      this.apiKey = null;
+    },
+    async loadPlugins(key) {
+      try {
+        const r = await fetch('/api/plugins/ui', { headers: { 'X-Api-Key': key } });
+        if (r.ok) this.plugins = await r.json();
+      } catch {}
+    },
+    connectStream(key) {
+      try {
+        const es = new EventSource('/api/stream?key=' + encodeURIComponent(key));
+        es.onmessage = (e) => {
+          try {
+            const evt = JSON.parse(e.data);
+            // Dedupe duplicate/echoed events (reconnects, multiple streams) within a short window.
+            const sig = (evt.Title || '') + '|' + (evt.Body || '');
+            const now = Date.now();
+            if (this._lastEvt && this._lastEvt.sig === sig && (now - this._lastEvt.t) < 4000) return;
+            this._lastEvt = { sig, t: now };
+            this.addMessage('agent', `🔔 ${evt.Title}\n${evt.Body || ''}`.trim());
+          } catch {}
+        };
+        es.onerror = () => { /* browser auto-reconnects */ };
+      } catch {}
+    },
+    addMessage(role, text, opts = {}) {
+      this.messages.push({ id: Date.now() + Math.random(), role, text, confirmation: opts.confirmation ?? false, confirmationId: opts.confirmationId ?? null });
+      this.$nextTick(() => { const el = this.$refs.messages; el.scrollTop = el.scrollHeight; });
+    },
+    async send() { const t = this.input.trim(); if (!t || this.loading) return; this.input = ''; this.addMessage('user', t); await this.callAgent(t); },
+    async sendText(t) { this.addMessage('user', t); await this.callAgent(t); },
+    async callAgent(text) {
+      this.loading = true;
+      try {
+        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.apiKey }, body: JSON.stringify({ text }) });
+        if (res.status === 401) { this.addMessage('agent', '🔒 Brak dostępu.'); return; }
+        if (res.status === 504) { this.addMessage('agent', '⏱ Agent nie odpowiedział w czasie.'); return; }
+        const data = await res.json();
+        this.addMessage('agent', data.text, { confirmation: data.requiresConfirmation, confirmationId: data.confirmationId });
+      } catch { this.addMessage('agent', '❌ Błąd połączenia.'); }
+      finally { this.loading = false; this.$nextTick(() => this.$refs.input?.focus()); }
+    },
+    async confirm(confirmationId, confirmed) {
+      const msg = this.messages.find(m => m.confirmationId === confirmationId); if (msg) msg.confirmation = false;
+      this.addMessage('user', confirmed ? '✅ Tak' : '❌ Anuluj'); this.loading = true;
+      try {
+        const res = await fetch('/api/chat/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.apiKey }, body: JSON.stringify({ confirmationId, confirmed }) });
+        const data = await res.json(); this.addMessage('agent', data.text);
+      } catch { this.addMessage('agent', '❌ Błąd podczas potwierdzania.'); }
+      finally { this.loading = false; }
+    },
+    async completeInvite() { if (!this.inviteName.trim()) return; await this.callAgent(`Mam na imię ${this.inviteName.trim()}`); this.isInvite = false; }
+  };
+}
+</script>
+</body>
+</html>

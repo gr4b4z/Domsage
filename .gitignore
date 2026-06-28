@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+nupkgs/
+wwwroot/index.html
+wwwroot/stats.html
+**/appsettings.*.local.json

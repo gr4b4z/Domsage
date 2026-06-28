@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentPlatform.Infrastructure\AgentPlatform.Infrastructure.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Family\AgentPlatform.Plugins.Family.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Telegram\AgentPlatform.Plugins.Telegram.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Http\AgentPlatform.Plugins.Http.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.WebSearch\AgentPlatform.Plugins.WebSearch.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Signal\AgentPlatform.Plugins.Signal.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Email\AgentPlatform.Plugins.Email.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Business\AgentPlatform.Plugins.Business.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.9" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="prompts/**/*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopyWebChat" BeforeTargets="Build">
+    <Copy SourceFiles="..\AgentPlatform.WebChat\index.html" DestinationFolder="wwwroot\" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="..\AgentPlatform.WebChat\stats.html" DestinationFolder="wwwroot\" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
