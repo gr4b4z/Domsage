@@ -7,7 +7,7 @@ using Spectre.Console;
 namespace AgentPlatform.Setup;
 
 /// <summary>
-/// `link-email --user &lt;userId&gt; --email &lt;address&gt; [--primary]` — adds an email address to a user
+/// `connect-email --user &lt;userId&gt; --email &lt;address&gt; [--primary]` — adds an email address to a user
 /// (a user may have several). The first becomes primary; pass --primary to promote a later one.
 /// Admin-side linking (trusted) — no verification needed, unlike the self-service web flow.
 /// With no/partial args it lists users.
@@ -28,7 +28,7 @@ public static class EmailLinkCommand
 
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(addr))
         {
-            AnsiConsole.MarkupLine("[yellow]Użycie:[/] link-email --user <userId> --email <adres> [--primary]\n");
+            AnsiConsole.MarkupLine("[yellow]Użycie:[/] connect-email --user <userId> --email <adres> [--primary]\n");
             try
             {
                 var users = await db.Users.AsNoTracking().OrderBy(u => u.DisplayName)

@@ -11,7 +11,10 @@ public static class EmailPluginExtensions
         services.Configure<EmailOptions>(config.GetSection("Email"));
         services.AddScoped<EmailParser>();
         services.AddSingleton<EmailSender>();
-        services.AddSingleton<EmailLinkStore>(); // self-service email verification codes
+        services.AddSingleton<EmailLinkStore>();  // self-service email verification codes
+        services.AddSingleton<EmailLoginStore>(); // passwordless email login codes
+        services.AddScoped<ISlashCommand, ConnectEmailCommand>();
+        services.AddScoped<ISlashCommand, ConfirmEmailCommand>();
         services.AddScoped<ImapPoller>();
         services.AddScoped<IScheduledJob, ImapPoller>();
         services.AddSingleton<EmailChannelPlugin>();

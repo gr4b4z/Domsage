@@ -111,7 +111,8 @@ public sealed class ReminderDispatcher(
         // Reschedule recurring jobs.
         if (!string.IsNullOrEmpty(job.RRule))
         {
-            var next = HangfireSchedulerService.NextOccurrence(job.RRule, job.Timezone, DateTimeOffset.UtcNow);
+            // .ToUniversalTime(): Npgsql rejects a zoned offset for 'timestamp with time zone'.
+            var next = HangfireSchedulerService.NextOccurrence(job.RRule, job.Timezone, DateTimeOffset.UtcNow).ToUniversalTime();
             await db.SchedulerJobs.Where(x => x.Id == jobId)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(x => x.NextRunAt, next)

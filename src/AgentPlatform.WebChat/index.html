@@ -50,11 +50,30 @@
   </header>
 
   <div x-show="!apiKey" x-cloak class="flex-1 flex items-center justify-center p-8">
-    <div class="text-center max-w-sm">
+    <div class="text-center max-w-sm w-full">
       <div class="text-5xl mb-4">🔑</div>
-      <h2 class="text-xl font-semibold text-gray-800 mb-2">Brak dostępu</h2>
-      <p class="text-gray-500 text-sm mb-6">Użyj linku wygenerowanego podczas konfiguracji lub otrzymanego od osoby zarządzającej.</p>
-      <p class="text-xs text-gray-400">Przykład: http://localhost:8080/#key=twoj-klucz</p>
+      <h2 class="text-xl font-semibold text-gray-800 mb-2">Zaloguj się</h2>
+      <template x-if="loginStep === 0">
+        <div>
+          <p class="text-gray-500 text-sm mb-4">Podaj swój email — wyślemy kod logowania.</p>
+          <input x-model="loginEmail" type="email" placeholder="twoj@email.pl" @keydown.enter="requestLoginCode()"
+            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center focus:outline-none focus:border-indigo-400 mb-3" />
+          <button @click="requestLoginCode()" :disabled="loginBusy"
+            class="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white rounded-xl py-3 font-medium transition">Wyślij kod</button>
+        </div>
+      </template>
+      <template x-if="loginStep === 1">
+        <div>
+          <p class="text-gray-500 text-sm mb-4" x-text="`Wpisz 6-cyfrowy kod wysłany na ${loginEmail}`"></p>
+          <input x-model="loginCode" inputmode="numeric" placeholder="123456" @keydown.enter="verifyLoginCode()"
+            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-2xl tracking-widest focus:outline-none focus:border-indigo-400 mb-3" />
+          <button @click="verifyLoginCode()" :disabled="loginBusy"
+            class="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white rounded-xl py-3 font-medium transition">Zaloguj</button>
+          <button @click="loginStep=0; loginCode=''; loginMsg=''" class="w-full text-gray-400 text-xs mt-2">← zmień email</button>
+        </div>
+      </template>
+      <p class="text-red-500 text-xs mt-3" x-show="loginMsg" x-text="loginMsg"></p>
+      <p class="text-xs text-gray-400 mt-6">Masz link z kluczem? Otwórz go bezpośrednio.</p>
     </div>
   </div>
 
@@ -127,6 +146,7 @@
 function chat() {
   return {
     apiKey: null, userName: '', isInvite: false, messages: [], input: '', loading: false, inviteName: '', plugins: [], showApps: false, telegramLinkable: false, emailLinkable: false,
+    loginEmail: '', loginCode: '', loginStep: 0, loginMsg: '', loginBusy: false,
     hints: ['Co mam dzisiaj do zapłacenia?', 'Dodaj mleko do listy zakupów', 'Jakie mam przypomnienia?', 'Zapłaciłem rachunek za gaz'],
     async init() {
       const params = new URLSearchParams(window.location.hash.slice(1));
@@ -202,6 +222,29 @@ function chat() {
         const data = await res.json(); this.addMessage('agent', data.text);
       } catch { this.addMessage('agent', '❌ Błąd podczas potwierdzania.'); }
       finally { this.loading = false; }
+    },
+    // Passwordless login: email → code → session token.
+    async requestLoginCode() {
+      const e = (this.loginEmail || '').trim();
+      if (!e.includes('@')) { this.loginMsg = 'Podaj poprawny adres email.'; return; }
+      this.loginMsg = ''; this.loginBusy = true;
+      try {
+        await fetch('/api/auth/email/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: e }) });
+        this.loginStep = 1; // always advance — we don't reveal whether the email exists
+      } catch { this.loginMsg = 'Błąd połączenia.'; }
+      finally { this.loginBusy = false; }
+    },
+    async verifyLoginCode() {
+      const c = (this.loginCode || '').trim();
+      if (!c) return;
+      this.loginMsg = ''; this.loginBusy = true;
+      try {
+        const r = await fetch('/api/auth/email/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: c }) });
+        const d = await r.json();
+        if (d.ok && d.key) { sessionStorage.setItem('agentKey', d.key); location.hash = ''; location.reload(); }
+        else this.loginMsg = d.message || 'Kod nieprawidłowy lub wygasł.';
+      } catch { this.loginMsg = 'Błąd połączenia.'; }
+      finally { this.loginBusy = false; }
     },
     // Self-service email linking: request a code (mailed to the address), then confirm with it.
     async linkEmail() {

@@ -35,6 +35,24 @@ public sealed class TelegramLinkTool(TelegramLinkStore links, IOptions<TelegramO
     }
 }
 
+/// <summary>/connect-telegram — deterministic slash command (no LLM) to link this user's Telegram chat.</summary>
+public sealed class ConnectTelegramCommand(TelegramLinkStore links, IOptions<TelegramOptions> options) : ISlashCommand
+{
+    private readonly TelegramOptions _opts = options.Value;
+    public string Name => "connect-telegram";
+    public string Description => "podłącz swój Telegram do konta";
+
+    public Task<string> HandleAsync(string args, ExecutionContext ctx, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_opts.BotToken) || !_opts.UsePolling)
+            return Task.FromResult("ℹ️ Telegram nie jest skonfigurowany na serwerze.");
+        var code = links.Mint(ctx.UserId);
+        var link = string.IsNullOrEmpty(_opts.BotUsername)
+            ? "" : $"\nLub otwórz: https://t.me/{_opts.BotUsername}?start={code}";
+        return Task.FromResult($"📨 Wyślij do bota: /start {code}{link}\n(Kod ważny 15 minut.)");
+    }
+}
+
 /// <summary>telegram.link — "połącz telegram" / "podłącz mój telegram".</summary>
 public sealed class TelegramLinkHandler : IIntentHandler
 {

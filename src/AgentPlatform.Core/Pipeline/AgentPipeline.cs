@@ -17,6 +17,8 @@ public sealed class AgentPipeline(
     ConversationResolver convResolver,
     IntentRouter intentRouter,
     SmalltalkResponder smalltalk,
+    ResultPhraser phraser,
+    IEnumerable<ISlashCommand> slashCommands,
     ContextBuilder contextBuilder,
     Planner planner,
     ActionValidator validator,
@@ -68,6 +70,19 @@ public sealed class AgentPipeline(
                 await DeliverAndWriteAsync(channel, msg, resp, ctx, ct);
                 runResult = OkResult(requestId, ctx, "confirmation", resp, started);
                 return;
+            }
+
+            // 5a'. Deterministic slash command? (/connect-email, /connect-telegram, /help) — no LLM.
+            if (msg.Text.TrimStart().StartsWith('/'))
+            {
+                var slash = await TryHandleSlashAsync(msg.Text.Trim(), ctx, ct);
+                if (slash is not null)
+                {
+                    var r = new ResponseResult(slash, false, null, null);
+                    await DeliverAndWriteAsync(channel, msg, r, ctx, ct);
+                    runResult = OkResult(requestId, ctx, "slash", r, started);
+                    return;
+                }
             }
 
             // 5b. Pending clarify intent?
@@ -190,7 +205,16 @@ public sealed class AgentPipeline(
         }
 
         var toolResult = await toolExecutor.ExecuteAsync(validated.Plan, ctx, ct);
-        return await responseBuilder.BuildAsync(toolResult, validated.Plan, ctx, ct);
+        var built = await responseBuilder.BuildAsync(toolResult, validated.Plan, ctx, ct);
+
+        // Optional: rephrase a successful tool result into a natural, question-aware answer.
+        if (handler.PhraseResult && toolResult.Status == ToolResultStatus.Success
+            && toolResult.Data is { } data && !built.RequiresConfirmation)
+        {
+            var phrased = await phraser.PhraseAsync(match.RawSegment, data.GetRawText(), built.Text, ctx, ct);
+            return built with { Text = phrased };
+        }
+        return built;
     }
 
     private async Task<ResponseResult> HandleConfirmationAsync(
@@ -214,6 +238,22 @@ public sealed class AgentPipeline(
 
         var toolResult = await toolExecutor.ExecuteAsync(pending.Plan, ctx, ct);
         return await responseBuilder.BuildAsync(toolResult, pending.Plan, ctx, ct);
+    }
+
+    // Returns the command's reply, or null if the text isn't a recognised slash command (so it falls
+    // through to normal handling — e.g. /reset is consumed earlier by ConversationResolver).
+    private async Task<string?> TryHandleSlashAsync(string text, ExecutionContext ctx, CancellationToken ct)
+    {
+        var sp = text.IndexOf(' ');
+        var name = (sp < 0 ? text[1..] : text[1..sp]).ToLowerInvariant();
+        var args = sp < 0 ? "" : text[(sp + 1)..].Trim();
+        if (name == "help")
+            return slashCommands.Any()
+                ? "Dostępne komendy:\n" + string.Join("\n",
+                    slashCommands.OrderBy(c => c.Name).Select(c => $"/{c.Name} — {c.Description}"))
+                : "Brak dostępnych komend.";
+        var cmd = slashCommands.FirstOrDefault(c => c.Name == name);
+        return cmd is null ? null : await cmd.HandleAsync(args, ctx, ct);
     }
 
     private async Task<UserGroupInfo?> ResolveUserAsync(InputMessage msg, CancellationToken ct) =>

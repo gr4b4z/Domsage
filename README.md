@@ -53,6 +53,14 @@ Agent    ›  Mogą, ale rzadko — czasem skubią grzyby, ale wolą mięso i ow
 
 You      ›  dodaj pieczarki do listy zakupów      ← an explicit command acts
 Agent    ›  🛒 Dodano do listy: pieczarki.
+
+You      ›  sprawdzaj codziennie rano czy ma padać i daj znać, żebym wziął parasol
+Agent    ›  📋 Utworzę regułę: codziennie o 07:00 sprawdzę pogodę i powiadomię,
+            gdy szansa opadów ≥ 60%. Potwierdzasz?       ← AI authors, you confirm
+You      ›  tak
+Agent    ›  ✅ Gotowe! Codziennie o 07:00 sprawdzę i dam znać, gdy trzeba.
+            … (next rainy morning, no LLM in the loop) …
+Agent    ›  🔔 Weź parasol — dziś 70% szans na deszcz.
 ```
 
 The same assistant answers in the **web chat**, on **Telegram**, **Signal**, or by **email** — one brain,
@@ -215,6 +223,8 @@ plus <i>incident-triage</i> (ToolCalling) and <i>deployment-approval</i> handler
 | Plugin | Provides | Notes |
 |---|---|---|
 | **WebSearch** | `web.search`, `web.answer_question` | Opt-in (`Plugins:WebSearch:Enabled`). Backends: SearXNG or Brave. When off, general questions are answered from the model's own knowledge. |
+| **Weather** | `weather.current` | Current conditions via Open-Meteo (free, no API key). A textbook self-contained plugin — own project, zero core changes. |
+| **Automation** | `automation.create`, `/automations` | Natural-language **if-this-then-that** rules. Sits on a generic engine: *schedule → run a read-only tool → deterministic condition → notify*. The LLM authors a rule once (you confirm it); the recurring check runs **with no LLM** (≈ free). One rule type, any check tool. |
 
 ---
 
@@ -232,6 +242,7 @@ contribute any of these — discovered generically at startup, **no host changes
 | `IChannelPlugin` | a new messaging surface (parse inbound / deliver outbound) |
 | `IScheduledJob` | recurring work (cron) |
 | `IWebhookHandler` | your own public HTTP endpoint (e.g. a provider webhook) |
+| `ISlashCommand` | a deterministic chat command (e.g. `/connect-email`), no LLM, listed by `/help` |
 | `IPluginUi` | a web UI embedded in your DLL, served at `/plugins/{id}/…` |
 | `IGroupTypeProvider` | a new group type + role mapping |
 | `IPipelineHook` | observe every run (metrics, logging) |
@@ -281,7 +292,7 @@ sdk/AgentPlatform.PluginSdk     # all extension contracts — the single source 
 src/AgentPlatform.Core          # the pipeline, registry, trust boundary, budget, scheduling
 src/AgentPlatform.Infrastructure# EF Core, repos, RLS interceptor, LLM provider, Hangfire, SSE
 src/AgentPlatform.Api           # composition root + minimal APIs + web chat
-src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch
+src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation
 src-tools/AgentPlatform.Setup   # CLI: guided setup + account linking
 tests/                          # Core (unit), Integration (Testcontainers), Eval (golden set), e2e
 ```
@@ -309,6 +320,7 @@ tool **idempotency**, and full-text search. `tests/e2e/FLOWS.md` documents every
 - [x] **MVP3** — Intelligence (invoice extraction, anomaly detection)
 - [x] **MVP4** — History search & memory
 - [x] **MVP5** — Business plugins (proof of the extension model)
+- [x] **Automations** — generic conditional IFTTT engine (schedule → check → condition → notify)
 - [ ] Plugin marketplace / external DLL loading from `~/.agentplatform/plugins`
 - [ ] More channels & domains (community plugins welcome)
 

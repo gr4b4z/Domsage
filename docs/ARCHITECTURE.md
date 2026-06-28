@@ -163,7 +163,7 @@ flowchart LR
   `channel_identities(channel_id, external_id, user_id, is_primary)` table; the core has **no per-channel
   columns** on `users`. A new channel plugin needs zero schema changes; `unique(channel_id, external_id)`
   enforces "one external id ↦ one user" at the DB level. Users link their own accounts (in-chat, or via
-  the `link-telegram` / `link-email` CLI).
+  the `/connect-telegram` / `/connect-email` chat commands or the matching CLI).
 - **Email can be many per user.** A user may have several email addresses (all `channel_id="email"` rows);
   one is `is_primary` and used for agent-initiated outbound (notifications). Inbound from *any* of them
   resolves to the user, and replies go back to the exact address used. `http` (the platform user id) is
@@ -218,6 +218,21 @@ NodaTime (rules + zone stored, not a fixed UTC instant). Plugins declare recurri
 (Telegram/Signal, resolved via generic `channel_identities`) → **email fallback**. A per-user
 `notify_mode` (`auto` / `email` / `silent`) tunes it. Notifications can carry a **tap-to-confirm action**
 (a tool id + input) so a reminder's "✅ Zapłacone" button runs a deterministic tool.
+
+### Automations (conditional, deterministic)
+A generic **if-this-then-that** engine generalises "scheduled notification" into *trigger → check →
+condition → action*. `AutomationRunner` (an `IScheduledJob`) wakes each minute, takes every due
+`automation_rules` row, runs its **read-only check tool** (via the same `ToolExecutor`/registry as a
+chat action), evaluates a **deterministic predicate** (`JsonCondition`: a dot-path into the tool's JSON
+result + an operator + a literal), and notifies the owner *only if it holds* — then reschedules
+(DST-safe, same machinery as reminders).
+
+The split is deliberate and is what keeps it cheap: an **LLM authors the rule once** (the
+`automation.create` handler maps "sprawdzaj rano czy ma padać" → a structured rule you confirm), but the
+**recurring evaluation uses no LLM** — just the tool's own work (e.g. a free weather call) and a numeric
+compare. The decision is grounded in data and a threshold, never a model's per-run judgement — consistent
+with *"AI is never the source of truth."* Any read-only tool is automatically a valid check; weather is
+just the first.
 
 ### Conversation & memory
 Conversations are persisted with summaries; semantic memory (pgvector) and full-text history search let

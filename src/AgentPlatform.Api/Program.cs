@@ -54,9 +54,16 @@ new AgentPlatform.Plugins.WebSearch.WebSearchPluginRegistration()
 // 5c. Business domain — MVP5, registered as a pure plugin (no core change).
 new AgentPlatform.Plugins.Business.WorkspacePluginRegistration()
     .Register(builder.Services, builder.Configuration.GetSection("Plugins:Workspace"));
+// 5d. Weather — a self-contained plugin (Open-Meteo, no API key). Zero core changes.
+new AgentPlatform.Plugins.Weather.WeatherPluginRegistration()
+    .Register(builder.Services, builder.Configuration.GetSection("Plugins:Weather"));
+// 5e. Automation — NL rule authoring on top of the generic automation engine (in Infrastructure).
+new AgentPlatform.Plugins.Automation.AutomationPluginRegistration()
+    .Register(builder.Services, builder.Configuration.GetSection("Plugins:Automation"));
 
 // Known plugin namespaces for contract validation.
-builder.Services.AddSingleton(new PluginNamespaces(["family", "web", "workspace", "telegram"]));
+builder.Services.AddSingleton(new PluginNamespaces(
+    ["family", "web", "workspace", "telegram", "weather", "automation"]));
 
 // 6. Scheduler (Hangfire)
 var connStr = builder.Configuration.GetConnectionString("Postgres")
@@ -292,6 +299,108 @@ app.MapPost("/api/me/email/confirm", async (
 
     var ok = await users.AddEmailIdentityAsync(s.UserId, pending.Value.Address, makePrimary: false, ct);
     return Results.Ok(new { ok, address = pending.Value.Address });
+});
+
+// Passwordless login — step 1: mail a login code to a registered address (no auth).
+app.MapPost("/api/auth/email/request", async (
+    [FromBody] EmailLoginRequest body,
+    [FromServices] IUserRepository users,
+    [FromServices] AgentPlatform.Plugins.Email.EmailLoginStore logins,
+    [FromServices] AgentPlatform.Plugins.Email.EmailSender sender,
+    CancellationToken ct) =>
+{
+    var email = body.Email?.Trim().ToLowerInvariant() ?? "";
+    if (email.Contains('@'))
+    {
+        var u = await users.GetByChannelIdentityAsync("email", email, ct);
+        if (u is not null) // unknown → silently no-op (don't reveal which emails exist)
+        {
+            var code = logins.Mint(u.UserId);
+            await sender.SendAsync(email, "[Agent] Kod logowania",
+                $"Twój kod logowania do domowego asystenta: {code}\n(Ważny 10 minut.)", null, ct);
+        }
+    }
+    return Results.Ok(new { sent = true });
+});
+
+// Passwordless login — step 2: exchange the code for a session token (no auth).
+app.MapPost("/api/auth/email/verify", async (
+    [FromBody] EmailLoginVerify body,
+    [FromServices] AgentPlatform.Plugins.Email.EmailLoginStore logins,
+    [FromServices] AppDbContext db, CancellationToken ct) =>
+{
+    var userId = logins.Consume(body.Code ?? "");
+    if (userId is null || !Guid.TryParse(userId, out var uid))
+        return Results.Ok(new { ok = false, message = "Kod nieprawidłowy lub wygasł." });
+
+    var rawToken = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+    var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken))).ToLowerInvariant();
+    db.UserTokens.Add(new() { UserId = uid, TokenHash = hash, Label = "email-login" });
+    await db.SaveChangesAsync(ct);
+    return Results.Ok(new { ok = true, key = rawToken });
+});
+
+// ── Automation rules (IFTTT) — schedule → run a read-only tool → deterministic condition → notify ──
+app.MapPost("/api/automations", async (
+    [FromBody] AutomationCreateRequest body,
+    [FromServices] UserTokenAuthenticator auth,
+    [FromServices] AppDbContext db,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    if (string.IsNullOrWhiteSpace(body.ToolId)) return Results.BadRequest(new { error = "toolId required" });
+
+    var tz = string.IsNullOrWhiteSpace(body.Timezone) ? "Europe/Warsaw" : body.Timezone!;
+    var rrule = string.IsNullOrWhiteSpace(body.RRule) ? "FREQ=DAILY" : body.RRule!;
+    DateTimeOffset nextRun =
+        !string.IsNullOrWhiteSpace(body.FirstRunAt) && DateTimeOffset.TryParse(body.FirstRunAt, out var parsed)
+            ? parsed.ToUniversalTime()
+            : AgentPlatform.Infrastructure.Automation.AutomationSchedule.NextAtTime(
+                Math.Clamp(body.Hour, 0, 23), Math.Clamp(body.Minute, 0, 59), tz, DateTimeOffset.UtcNow);
+
+    var rule = new AgentPlatform.Infrastructure.Postgres.Entities.AutomationRuleEntity
+    {
+        UserId = Guid.Parse(s.UserId),
+        GroupId = Guid.TryParse(s.GroupId, out var g) ? g : null,
+        Description = body.Description ?? "",
+        RRule = rrule, Timezone = tz, NextRunAt = nextRun,
+        ToolId = body.ToolId,
+        ToolInput = body.ToolInput.ValueKind == JsonValueKind.Object ? body.ToolInput.GetRawText() : "{}",
+        ConditionPath = body.ConditionPath ?? "", ConditionOp = body.ConditionOp ?? ">=",
+        ConditionValue = body.ConditionValue ?? "", MessageText = body.Message ?? "",
+    };
+    db.AutomationRules.Add(rule);
+    await db.SaveChangesAsync(ct);
+    return Results.Ok(new { id = rule.Id, nextRunAt = rule.NextRunAt });
+});
+
+app.MapGet("/api/automations", async (
+    [FromServices] UserTokenAuthenticator auth, [FromServices] AppDbContext db,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    var uid = Guid.Parse(s.UserId);
+    var rules = await db.AutomationRules.AsNoTracking().Where(r => r.UserId == uid)
+        .OrderByDescending(r => r.CreatedAt)
+        .Select(r => new
+        {
+            r.Id, r.Description, r.ToolId, r.ConditionPath, r.ConditionOp, r.ConditionValue,
+            r.MessageText, r.Enabled, r.NextRunAt, r.LastTriggeredAt
+        }).ToListAsync(ct);
+    return Results.Ok(rules);
+});
+
+app.MapDelete("/api/automations/{id:guid}", async (
+    Guid id, [FromServices] UserTokenAuthenticator auth, [FromServices] AppDbContext db,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    var uid = Guid.Parse(s.UserId);
+    var n = await db.AutomationRules.Where(r => r.Id == id && r.UserId == uid).ExecuteDeleteAsync(ct);
+    return n > 0 ? Results.Ok(new { deleted = true }) : Results.NotFound();
 });
 
 app.MapPost("/api/chat", async (

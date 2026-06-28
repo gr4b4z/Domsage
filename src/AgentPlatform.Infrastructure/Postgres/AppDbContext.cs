@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ConversationMessageEntity> ConversationMessages => Set<ConversationMessageEntity>();
     public DbSet<MemoryFactEntity> MemoryFacts => Set<MemoryFactEntity>();
     public DbSet<ChannelIdentity> ChannelIdentities => Set<ChannelIdentity>();
+    public DbSet<AutomationRuleEntity> AutomationRules => Set<AutomationRuleEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -76,5 +77,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<MemoryFactEntity>().HasKey(x => x.Id);
         b.Entity<MemoryFactEntity>().HasIndex(x => new { x.GroupId, x.UserId, x.Key }).IsUnique();
+
+        b.Entity<AutomationRuleEntity>().HasKey(x => x.Id);
+        b.Entity<AutomationRuleEntity>().HasIndex(x => new { x.Enabled, x.NextRunAt });
+        b.Entity<AutomationRuleEntity>().HasIndex(x => x.UserId);
     }
 }

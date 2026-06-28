@@ -20,7 +20,8 @@ public static class TelegramPluginExtensions
         services.AddHostedService<TelegramConnector>();
         services.AddSingleton<IWebhookHandler, TelegramWebhookHandler>();
 
-        // Conversational linking: "połącz telegram" in chat → mints a code + deep link.
+        // Linking: slash command (/connect-telegram, deterministic) + NL alias ("połącz telegram").
+        services.AddScoped<ISlashCommand, ConnectTelegramCommand>();
         services.AddSingleton<ITool, TelegramLinkTool>();
         services.AddSingleton<IIntentHandler, TelegramLinkHandler>();
         return services;

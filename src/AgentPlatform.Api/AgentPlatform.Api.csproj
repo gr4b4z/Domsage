@@ -9,6 +9,8 @@
     <ProjectReference Include="..\AgentPlatform.Plugins.Signal\AgentPlatform.Plugins.Signal.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Email\AgentPlatform.Plugins.Email.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Business\AgentPlatform.Plugins.Business.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Weather\AgentPlatform.Plugins.Weather.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Automation\AgentPlatform.Plugins.Automation.csproj" />
   </ItemGroup>
 
   <ItemGroup>

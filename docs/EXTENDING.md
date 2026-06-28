@@ -22,6 +22,7 @@ A plugin can contribute any combination of:
 | Add a messaging surface (chat app) | `IChannelPlugin` |
 | Run something on a schedule | `IScheduledJob` |
 | Expose a public HTTP endpoint (webhook) | `IWebhookHandler` |
+| Add a deterministic chat command (`/foo`) | `ISlashCommand` |
 | Ship a web UI inside the DLL | `IPluginUi` |
 | Define a new kind of group + roles | `IGroupTypeProvider` |
 | Observe every pipeline run | `IPipelineHook` |
@@ -76,6 +77,10 @@ public sealed class CreateNoteTool(INotesRepository repo) : ITool
 To signal failure gracefully (no crash, clean user message), return `ToolResultStatus.Failed`/`Retryable`
 with a `HumanMessage` — the executor converts these into handled pipeline outcomes.
 
+Optional: override `ConfirmationPreview(JsonElement input)` to render a human-readable preview when your
+tool requires confirmation (e.g. `"Utworzę regułę: codziennie o 07:00…"`). Default `null` → a generic
+"Czy potwierdzasz akcję…?" prompt.
+
 ### `IIntentHandler` — declare what an intent needs
 
 ```csharp
@@ -88,6 +93,9 @@ public sealed class AddNoteHandler : IIntentHandler
     public string PromptTemplateId => "add_note";
     public ModelTier PreferredTier => ModelTier.Small;
     public ConfirmationPolicy Confirmation => ConfirmationPolicy.NotRequired;
+    // Optional: a one-line Description is added to the intent-router prompt so fuzzy phrasings
+    // ("przypomnij mi…", "pilnuj…") route to your intent reliably. Default null → router sees only the id.
+    public string? Description => "save a quick note ('zapisz notatkę', 'zanotuj…')";
 }
 ```
 
@@ -132,6 +140,15 @@ public sealed class NotesDigestJob(/* deps */) : IScheduledJob
 }
 // register: services.AddScoped<IScheduledJob, NotesDigestJob>();
 ```
+
+### Make a tool usable as an automation check
+
+The automation engine (*schedule → run a read-only tool → deterministic condition → notify*) needs no
+new contract from you. **Any `ITool` with `HasSideEffects == false` and a stable JSON result is already a
+valid check** — the engine resolves it from the registry like any action, then evaluates a dot-path
+predicate (`Days.1.PrecipProb >= 60`) against its `Data`. To let users author rules against your tool in
+natural language, add a short entry to `automation_create__v1.0.0.txt` describing its `tool_input` args
+and the shape of its result (which fields are checkable). No core change; no per-tool wiring.
 
 ### `IWebhookHandler` — your own public endpoint
 
@@ -179,6 +196,25 @@ e.g. tap a checkbox → `{"tool":"notes.create","input":{"text":"…"}}`.
 Implement `ParseAsync` (RawEvent → `InputMessage`) and `DeliverAsync` (`OutputMessage` → your API).
 Users are resolved by **channel identity**: `IUserRepository.GetByChannelIdentityAsync(channelId, externalId)`
 and linked with `SetChannelIdentityAsync` — the core never stores per-channel columns.
+
+### `ISlashCommand` — a deterministic chat command
+
+Dispatched by the pipeline BEFORE the LLM router (no model call); the host adds a built-in `/help` listing.
+Use for meta/config actions where reliability beats fuzzy phrasing (e.g. account linking).
+
+```csharp
+public sealed class ConnectEmailCommand(EmailLinkStore links, EmailSender sender) : ISlashCommand
+{
+    public string Name => "connect-email";                 // matched as "/connect-email …"
+    public string Description => "podłącz adres email";    // shown by /help
+    public async Task<string> HandleAsync(string args, ExecutionContext ctx, CancellationToken ct)
+    {
+        // args = everything after the command name; return the reply text
+        ...
+    }
+}
+// register Scoped if it has scoped deps (e.g. IUserRepository): services.AddScoped<ISlashCommand, …>();
+```
 
 ### `IGroupTypeProvider` — a new group type
 

@@ -50,6 +50,10 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<ISchedulerService, HangfireSchedulerService>();
         services.AddScoped<ReminderDispatcher>();
 
+        // Generic automation engine — a recurring scheduled job, discovered like any other.
+        services.AddScoped<Automation.AutomationRunner>();
+        services.AddScoped<IScheduledJob, Automation.AutomationRunner>();
+
         services.AddSingleton<ISseHub, Notifications.InMemorySseHub>();
         services.AddScoped<IGroupDirectory, Notifications.GroupDirectory>();
         services.AddScoped<INotificationService, Notifications.NotificationService>();

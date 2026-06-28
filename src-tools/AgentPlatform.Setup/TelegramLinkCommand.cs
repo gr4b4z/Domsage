@@ -7,7 +7,7 @@ using Spectre.Console;
 namespace AgentPlatform.Setup;
 
 /// <summary>
-/// `link-telegram --user &lt;userId&gt; --telegram &lt;chatId&gt;` — binds a Telegram chat to a user
+/// `connect-telegram --user &lt;userId&gt; --telegram &lt;chatId&gt;` — binds a Telegram chat to a user
 /// straight in the DB (channel_identities), so you don't have to use the web "Połącz Telegram" flow.
 /// With no/partial args it lists users so you can copy an id.
 /// </summary>
@@ -26,7 +26,7 @@ public static class TelegramLinkCommand
 
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(chat))
         {
-            AnsiConsole.MarkupLine("[yellow]Użycie:[/] link-telegram --user <userId> --telegram <chatId>");
+            AnsiConsole.MarkupLine("[yellow]Użycie:[/] connect-telegram --user <userId> --telegram <chatId>");
             AnsiConsole.MarkupLine("[grey](chatId to numer Twojego czatu z botem — bot pokazuje go na /start)[/]\n");
             try
             {

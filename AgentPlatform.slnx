@@ -9,6 +9,7 @@
     <Project Path="src/AgentPlatform.Api/AgentPlatform.Api.csproj" />
     <Project Path="src/AgentPlatform.Core/AgentPlatform.Core.csproj" />
     <Project Path="src/AgentPlatform.Infrastructure/AgentPlatform.Infrastructure.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Automation/AgentPlatform.Plugins.Automation.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Business/AgentPlatform.Plugins.Business.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Email/AgentPlatform.Plugins.Email.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Family/AgentPlatform.Plugins.Family.csproj" />
@@ -16,6 +17,7 @@
     <Project Path="src/AgentPlatform.Plugins.Signal/AgentPlatform.Plugins.Signal.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Telegram/AgentPlatform.Plugins.Telegram.csproj" />
     <Project Path="src/AgentPlatform.Plugins.WebSearch/AgentPlatform.Plugins.WebSearch.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Weather/AgentPlatform.Plugins.Weather.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentPlatform.Core.Tests/AgentPlatform.Core.Tests.csproj" />

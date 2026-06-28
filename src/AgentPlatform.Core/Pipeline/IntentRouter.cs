@@ -27,10 +27,10 @@ public sealed class IntentRouter(
     public async Task<IReadOnlyList<IntentMatch>> ClassifyAsync(
         InputMessage msg, ExecutionContext ctx, CancellationToken ct)
     {
-        var intentIds = registry.AllHandlers
-            .Select(h => h.IntentId)
-            .Where(id => id is not ("clarify" or "fallback"))
+        var handlers = registry.AllHandlers
+            .Where(h => h.IntentId is not ("clarify" or "fallback"))
             .ToList();
+        var intentIds = handlers.Select(h => h.IntentId).ToList();
 
         if (intentIds.Count == 0)
             return [new IntentMatch("fallback", 1.0, msg.Text, [])];
@@ -40,7 +40,8 @@ public sealed class IntentRouter(
         var system =
             "You are an intent router for a household assistant. Classify the user message into " +
             "one or more of these intents (split multi-intent requests):\n" +
-            string.Join("\n", intentIds.Select(i => "- " + i)) + "\n" +
+            string.Join("\n", handlers.Select(h =>
+                "- " + h.IntentId + (string.IsNullOrWhiteSpace(h.Description) ? "" : ": " + h.Description))) + "\n" +
             "Guidance: prefer the most specific add/create/list/mark intent that matches the words used. " +
             "Only choose an intent about a received or attached document/invoice when the user explicitly " +
             "says they received, forwarded or attached one. For 'what do I have / owe / need' questions, pick a list_* intent. " +

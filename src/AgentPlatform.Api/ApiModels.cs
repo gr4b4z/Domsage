@@ -14,6 +14,16 @@ public record ActionRequest(string Tool, System.Text.Json.JsonElement Input);
 public record EmailLinkRequest(string Address);
 public record EmailLinkConfirm(string Code);
 
+// Passwordless email login (code mailed to a registered address → session token).
+public record EmailLoginRequest(string Email);
+public record EmailLoginVerify(string Code);
+
+// Automation rule (IFTTT): schedule → run ToolId → if ConditionPath ConditionOp ConditionValue → notify.
+public record AutomationCreateRequest(
+    string Description, string ToolId, System.Text.Json.JsonElement ToolInput,
+    string ConditionPath, string ConditionOp, string ConditionValue, string Message,
+    int Hour, int Minute, string? RRule, string? Timezone, string? FirstRunAt);
+
 // Stats SQL projections.
 public record LlmDailyRow(DateOnly Day, int Calls, long InputTokens, long OutputTokens, decimal CostUsd, string ModelTier);
 public record ToolStatsRow(string ToolId, int TotalCalls, int Successes, int Failures, decimal AvgCostUsd);

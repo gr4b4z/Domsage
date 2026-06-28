@@ -154,6 +154,40 @@ public class SchedulerJobEntity
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>
+/// A generic "if-this-then-that" rule: on a schedule, run a read-only tool, evaluate a deterministic
+/// condition on its result, and notify the owner only when it holds. The recurring run uses NO LLM —
+/// the LLM authors the rule once, the engine executes it deterministically.
+/// </summary>
+[Table("automation_rules")]
+public class AutomationRuleEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public Guid? GroupId { get; set; }
+    public string Description { get; set; } = "";
+    public string RRule { get; set; } = "FREQ=DAILY";
+    public string Timezone { get; set; } = "Europe/Warsaw";
+    public DateTimeOffset NextRunAt { get; set; }
+    /// <summary>Read-only tool to run as the check, e.g. "weather.current".</summary>
+    public string ToolId { get; set; } = "";
+    /// <summary>JSON arguments for the check tool.</summary>
+    public string ToolInput { get; set; } = "{}";
+    /// <summary>Dot-path into the tool result, e.g. "Days.1.PrecipProb".</summary>
+    public string ConditionPath { get; set; } = "";
+    /// <summary>One of: &gt;= &lt;= &gt; &lt; == != contains.</summary>
+    public string ConditionOp { get; set; } = ">=";
+    public string ConditionValue { get; set; } = "";
+    /// <summary>Notification text when the condition holds. May use {value} for the matched value.</summary>
+    public string MessageText { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    /// <summary>Last time the check ran (regardless of outcome).</summary>
+    public DateTimeOffset? LastFiredAt { get; set; }
+    /// <summary>Last time the condition held and a notification was sent.</summary>
+    public DateTimeOffset? LastTriggeredAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 [Table("pending_confirmations")]
 public class PendingConfirmationEntity
 {

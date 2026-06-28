@@ -19,6 +19,7 @@ public static class CoreServiceExtensions
         // Pipeline components — Scoped (per message, DB access + per-request state).
         services.AddScoped<IntentRouter>();
         services.AddScoped<SmalltalkResponder>();
+        services.AddScoped<ResultPhraser>();
         services.AddScoped<ContextBuilder>();
         services.AddScoped<Planner>();
         services.AddScoped<PromptBuilder>();

@@ -48,10 +48,12 @@ public sealed class ActionValidator(
         };
 
         return needsConfirm
-            ? new ValidationResult(true, plan, ConfirmationPrompt: BuildPrompt(plan))
+            ? new ValidationResult(true, plan, ConfirmationPrompt: BuildPrompt(plan, tool))
             : new ValidationResult(false, plan);
     }
 
-    private static string BuildPrompt(ActionPlan plan) =>
-        $"Czy potwierdzasz akcję „{plan.Intent}”{(plan.TargetId is not null ? $" ({plan.TargetId})" : "")}?";
+    // A tool may render its own preview from the proposed input; otherwise a generic prompt.
+    private static string BuildPrompt(ActionPlan plan, ITool tool) =>
+        tool.ConfirmationPreview(plan.ToolInput)
+        ?? $"Czy potwierdzasz akcję „{plan.Intent}”{(plan.TargetId is not null ? $" ({plan.TargetId})" : "")}?";
 }

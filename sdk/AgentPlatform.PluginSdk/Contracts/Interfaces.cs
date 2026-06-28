@@ -20,6 +20,12 @@ public interface ITool
     ScopeRequirement RequiredScope { get; }
     bool HasSideEffects { get; }
     Task<ToolResult> ExecuteAsync(ToolInput input, ExecutionContext ctx, CancellationToken ct);
+
+    /// <summary>
+    /// Optional human-readable preview shown when this tool requires confirmation, built from the
+    /// proposed input (e.g. "Utworzę regułę: codziennie o 7:00…"). Default null → a generic prompt.
+    /// </summary>
+    string? ConfirmationPreview(System.Text.Json.JsonElement input) => null;
 }
 
 /// <summary>Purely declarative — tells the Planner what an intent needs. Does not call the LLM.</summary>
@@ -33,6 +39,20 @@ public interface IIntentHandler
     ModelTier PreferredTier { get; }
     ConfirmationPolicy Confirmation { get; }
     string? CapabilityId => null;
+
+    /// <summary>
+    /// Optional one-line hint shown to the intent router so it can match this intent more reliably
+    /// (e.g. "recurring monitoring: 'sprawdzaj codziennie…', 'powiadom mnie gdy…'"). Default null →
+    /// the router sees only the intent id. Keep it short; it is added to every routing prompt.
+    /// </summary>
+    string? Description => null;
+
+    /// <summary>
+    /// When true, the tool's structured result is rephrased by a small LLM into a natural answer to the
+    /// user's actual question (instead of returning the tool's fixed message). For Q&amp;A-style intents
+    /// (weather, web answers). Default false — commands/actions keep their concise deterministic reply.
+    /// </summary>
+    bool PhraseResult => false;
 }
 
 /// <summary>Supplies a scoped slice of state for the Context Builder.</summary>
