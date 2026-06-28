@@ -36,6 +36,15 @@
             <span class="text-lg" x-text="p.icon"></span><span x-text="p.title"></span>
           </a>
         </template>
+        <template x-if="emailLinkable">
+          <div>
+            <div class="border-t border-gray-100 my-1"></div>
+            <button @click="linkEmail()"
+              class="w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 text-gray-800 text-sm">
+              <span class="text-lg">📧</span><span>Połącz email</span>
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </header>
@@ -117,7 +126,7 @@
 <script>
 function chat() {
   return {
-    apiKey: null, userName: '', isInvite: false, messages: [], input: '', loading: false, inviteName: '', plugins: [], showApps: false, telegramLinkable: false,
+    apiKey: null, userName: '', isInvite: false, messages: [], input: '', loading: false, inviteName: '', plugins: [], showApps: false, telegramLinkable: false, emailLinkable: false,
     hints: ['Co mam dzisiaj do zapłacenia?', 'Dodaj mleko do listy zakupów', 'Jakie mam przypomnienia?', 'Zapłaciłem rachunek za gaz'],
     async init() {
       const params = new URLSearchParams(window.location.hash.slice(1));
@@ -130,7 +139,7 @@ function chat() {
           const res = await fetch('/api/me', { headers: { 'X-Api-Key': key } });
           if (res.ok) {
             const me = await res.json();
-            this.apiKey = key; this.userName = me.name; this.isInvite = me.isInvite; this.telegramLinkable = !!me.telegramLinkable;
+            this.apiKey = key; this.userName = me.name; this.isInvite = me.isInvite; this.telegramLinkable = !!me.telegramLinkable; this.emailLinkable = !!me.emailLinkable;
             if (this.telegramLinkable && !this.hints.includes('Połącz Telegram')) this.hints = [...this.hints, 'Połącz Telegram'];
             sessionStorage.setItem('agentKey', key);
             if (!me.isInvite) { this.connectStream(key); this.loadPlugins(key); }
@@ -193,6 +202,22 @@ function chat() {
         const data = await res.json(); this.addMessage('agent', data.text);
       } catch { this.addMessage('agent', '❌ Błąd podczas potwierdzania.'); }
       finally { this.loading = false; }
+    },
+    // Self-service email linking: request a code (mailed to the address), then confirm with it.
+    async linkEmail() {
+      this.showApps = false;
+      const addr = (prompt('Twój adres email do połączenia:') || '').trim();
+      if (!addr) return;
+      try {
+        const r = await fetch('/api/me/email/request', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.apiKey }, body: JSON.stringify({ address: addr }) });
+        if (!r.ok) { this.addMessage('agent', '❌ Nie udało się wysłać kodu (sprawdź adres).'); return; }
+        this.addMessage('agent', `📧 Wysłałem kod weryfikacyjny na ${addr}. Sprawdź skrzynkę.`);
+        const code = (prompt(`Wpisz kod wysłany na ${addr}:`) || '').trim();
+        if (!code) return;
+        const c = await fetch('/api/me/email/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.apiKey }, body: JSON.stringify({ code }) });
+        const d = await c.json();
+        this.addMessage('agent', d.ok ? `✅ Połączono email: ${d.address}` : `❌ ${d.message || 'Kod nieprawidłowy lub wygasł.'}`);
+      } catch { this.addMessage('agent', '❌ Błąd połączenia.'); }
     },
     // Tap-to-confirm: runs the notification's ack tool deterministically via /api/action (no LLM).
     async runAction(msg) {

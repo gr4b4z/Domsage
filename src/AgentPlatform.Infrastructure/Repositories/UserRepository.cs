@@ -16,9 +16,6 @@ public sealed class UserRepository(AppDbContext db) : IUserRepository
         return uid is null ? null : await ResolveAsync(u => u.Id == uid, ct);
     }
 
-    public Task<UserGroupInfo?> GetByEmailAsync(string email, CancellationToken ct) =>
-        ResolveAsync(u => u.Email == email, ct);
-
     public async Task<UserGroupInfo?> GetPrimaryGroupAsync(string userId, CancellationToken ct)
     {
         if (!Guid.TryParse(userId, out var uid)) return null;
@@ -36,6 +33,32 @@ public sealed class UserRepository(AppDbContext db) : IUserRepository
                      || (c.ChannelId == channelId && c.UserId == uid))
             .ExecuteDeleteAsync(ct);
         db.ChannelIdentities.Add(new ChannelIdentity { ChannelId = channelId, ExternalId = externalId, UserId = uid });
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> AddEmailIdentityAsync(string userId, string address, bool makePrimary, CancellationToken ct)
+    {
+        if (!Guid.TryParse(userId, out var uid)) return false;
+        if (!await db.Users.AnyAsync(u => u.Id == uid, ct)) return false;
+        address = address.Trim().ToLowerInvariant();
+
+        // An address belongs to exactly one user — drop it from anyone (incl. this user, to re-add cleanly).
+        await db.ChannelIdentities.Where(c => c.ChannelId == "email" && c.ExternalId == address)
+            .ExecuteDeleteAsync(ct);
+
+        // First email is primary by default; promote on request.
+        var hasPrimary = await db.ChannelIdentities.AnyAsync(
+            c => c.ChannelId == "email" && c.UserId == uid && c.IsPrimary, ct);
+        var primary = makePrimary || !hasPrimary;
+        if (primary)
+            await db.ChannelIdentities.Where(c => c.ChannelId == "email" && c.UserId == uid && c.IsPrimary)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.IsPrimary, false), ct);
+
+        db.ChannelIdentities.Add(new ChannelIdentity
+        {
+            ChannelId = "email", ExternalId = address, UserId = uid, IsPrimary = primary
+        });
         await db.SaveChangesAsync(ct);
         return true;
     }

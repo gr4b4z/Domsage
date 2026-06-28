@@ -34,9 +34,10 @@ public sealed partial class EmailParser(IUserRepository users, ILogger<EmailPars
 {
     public async Task<ParsedEmail?> ParseAsync(MimeMessage msg, CancellationToken ct)
     {
-        var fromAddr = msg.From.OfType<MailboxAddress>().FirstOrDefault()?.Address;
+        var fromAddr = msg.From.OfType<MailboxAddress>().FirstOrDefault()?.Address?.Trim().ToLowerInvariant();
         if (fromAddr is null) return null;
-        var user = await users.GetByEmailAsync(fromAddr, ct);
+        // Email is a generic channel identity now — any of the user's linked addresses resolves to them.
+        var user = await users.GetByChannelIdentityAsync("email", fromAddr, ct);
         if (user is null) { log.LogInformation("Email from unknown sender {Addr} — ignored", fromAddr); return null; }
 
         var isReply = msg.Subject?.StartsWith("Re:", StringComparison.OrdinalIgnoreCase) == true;

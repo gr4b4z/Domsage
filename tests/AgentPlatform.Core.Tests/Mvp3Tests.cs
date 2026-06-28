@@ -33,11 +33,11 @@ file sealed class StubPaymentsRepo(List<Payment> payments) : IPaymentsRepository
 
 file sealed class StubUserRepo(string? email) : IUserRepository
 {
-    public Task<UserGroupInfo?> GetByChannelIdentityAsync(string c, string e, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
-    public Task<UserGroupInfo?> GetByEmailAsync(string e, CancellationToken ct) =>
-        Task.FromResult(e == email ? new UserGroupInfo("u1", "g1", "household", MemberRole.Member, "Test") : null);
+    public Task<UserGroupInfo?> GetByChannelIdentityAsync(string c, string e, CancellationToken ct) =>
+        Task.FromResult(c == "email" && e == email ? new UserGroupInfo("u1", "g1", "household", MemberRole.Member, "Test") : null);
     public Task<UserGroupInfo?> GetPrimaryGroupAsync(string u, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
     public Task<bool> SetChannelIdentityAsync(string u, string c, string e, CancellationToken ct) => Task.FromResult(false);
+    public Task<bool> AddEmailIdentityAsync(string u, string a, bool p, CancellationToken ct) => Task.FromResult(false);
 }
 
 public class InvoiceExtractToolTests

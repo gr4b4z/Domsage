@@ -6,7 +6,8 @@ namespace AgentPlatform.Infrastructure.Postgres.Entities;
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string? Email { get; set; } // person attribute (not a channel binding)
+    // Email is no longer a column — addresses live in channel_identities (channel_id="email"),
+    // one flagged IsPrimary for outbound notifications. A user may have several.
     public string DisplayName { get; set; } = "";
     public string Timezone { get; set; } = "Europe/Warsaw";
     public string? PreferredChannel { get; set; }
@@ -19,9 +20,12 @@ public class User
 public class ChannelIdentity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string ChannelId { get; set; } = "";  // "telegram", "signal", … (a plugin's channel)
-    public string ExternalId { get; set; } = ""; // chat id / phone number on that channel
+    public string ChannelId { get; set; } = "";  // "telegram", "signal", "email" … (a plugin's channel)
+    public string ExternalId { get; set; } = ""; // chat id / phone number / email address on that channel
     public Guid UserId { get; set; }
+    /// <summary>For channels where a user can have several identities (email): the one used for
+    /// agent-initiated outbound (notifications). Irrelevant for single-identity channels.</summary>
+    public bool IsPrimary { get; set; }
 }
 
 [Table("user_tokens")]

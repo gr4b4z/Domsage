@@ -154,6 +154,40 @@ public class ReminderTests(PostgresFixture fx)
         Assert.False(await repo.SetChannelIdentityAsync(Guid.NewGuid().ToString(), "telegram", "999", ct));
     }
 
+    [Fact]
+    public async Task EmailIdentities_Multiple_ResolveToUser_FirstIsPrimary()
+    {
+        await using var core = CoreDb();
+        var ct = CancellationToken.None;
+        var repo = new AgentPlatform.Infrastructure.Repositories.UserRepository(core);
+
+        var g = Guid.NewGuid();
+        core.Groups.Add(new Group { Id = g, Type = "household", Name = "Dom" });
+        var u = new User { DisplayName = "Jan" };
+        core.Users.Add(u);
+        core.GroupMembers.Add(new AgentPlatform.Infrastructure.Postgres.Entities.GroupMember
+        { GroupId = g, UserId = u.Id, Role = "member" });
+        await core.SaveChangesAsync(ct);
+
+        // First email becomes primary; a second is additional. Both resolve (case-insensitive).
+        Assert.True(await repo.AddEmailIdentityAsync(u.Id.ToString(), "Jan@Home.PL", false, ct));
+        Assert.True(await repo.AddEmailIdentityAsync(u.Id.ToString(), "jan@work.com", false, ct));
+        Assert.Equal(u.Id.ToString(), (await repo.GetByChannelIdentityAsync("email", "jan@home.pl", ct))!.UserId);
+        Assert.Equal(u.Id.ToString(), (await repo.GetByChannelIdentityAsync("email", "jan@work.com", ct))!.UserId);
+
+        var primary = await core.ChannelIdentities.AsNoTracking()
+            .Where(c => c.UserId == u.Id && c.ChannelId == "email" && c.IsPrimary)
+            .Select(c => c.ExternalId).ToListAsync(ct);
+        Assert.Equal(["jan@home.pl"], primary); // exactly one, the first
+
+        // Promoting the second moves the primary flag.
+        Assert.True(await repo.AddEmailIdentityAsync(u.Id.ToString(), "jan@work.com", true, ct));
+        var promoted = await core.ChannelIdentities.AsNoTracking()
+            .Where(c => c.UserId == u.Id && c.ChannelId == "email" && c.IsPrimary)
+            .Select(c => c.ExternalId).ToListAsync(ct);
+        Assert.Equal(["jan@work.com"], promoted);
+    }
+
     private sealed class CapturingNotifier : INotificationService
     {
         public readonly List<LiveEvent> Events = [];
@@ -165,7 +199,7 @@ public class ReminderTests(PostgresFixture fx)
     {
         public Task<IReadOnlyList<AgentPlatform.Core.Contracts.GroupMember>> GetMembersAsync(string groupId, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<AgentPlatform.Core.Contracts.GroupMember>>(
-                [new AgentPlatform.Core.Contracts.GroupMember(memberId, "X", null, null)]);
+                [new AgentPlatform.Core.Contracts.GroupMember(memberId, "X", null)]);
         public Task<IReadOnlyList<AgentPlatform.Core.Contracts.GroupMember>> ResolveByNamesAsync(string groupId, IEnumerable<string> names, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<AgentPlatform.Core.Contracts.GroupMember>>([]);
     }

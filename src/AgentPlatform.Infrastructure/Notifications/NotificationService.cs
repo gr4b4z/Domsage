@@ -29,7 +29,7 @@ public sealed class NotificationService(
         var identities = (await db.ChannelIdentities.AsNoTracking()
                 .Where(c => ids.Contains(c.UserId)).ToListAsync(ct))
             .GroupBy(c => c.UserId)
-            .ToDictionary(g => g.Key, g => g.ToDictionary(c => c.ChannelId, c => c.ExternalId));
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var u in users)
         {
@@ -40,26 +40,30 @@ public sealed class NotificationService(
 
             if (u.NotifyMode == "silent") continue; // web only
 
-            // Best-effort push on a messaging channel (resolved via generic channel identities).
+            // Resolve outbound targets from the user's channel identities. A user may have several
+            // emails — pick the primary (falling back to any).
             var chans = identities.GetValueOrDefault(u.Id) ?? [];
-            var hasMessaging = chans.ContainsKey("telegram") || chans.ContainsKey("signal");
+            var tg = chans.FirstOrDefault(c => c.ChannelId == "telegram")?.ExternalId;
+            var sig = chans.FirstOrDefault(c => c.ChannelId == "signal")?.ExternalId;
+            var primaryEmail = (chans.FirstOrDefault(c => c.ChannelId == "email" && c.IsPrimary)
+                                ?? chans.FirstOrDefault(c => c.ChannelId == "email"))?.ExternalId;
+            var hasMessaging = tg is not null || sig is not null;
+
             try
             {
-                if (chans.TryGetValue("telegram", out var tg))
-                    await Deliver("telegram", tg, evt, ct);
-                else if (chans.TryGetValue("signal", out var sig))
-                    await Deliver("signal", sig, evt, ct);
+                if (tg is not null) await Deliver("telegram", tg, evt, ct);
+                else if (sig is not null) await Deliver("signal", sig, evt, ct);
             }
             catch (Exception ex) { log.LogWarning(ex, "Channel push failed for {User}", u.Id); }
 
             // Email fallback: forced ("email" mode), or last-resort when the user can't be reached
             // live and has no messaging channel — so a reminder is never silently lost.
             var emailFallback = u.NotifyMode == "email" || (!live && !hasMessaging);
-            if (emailFallback && !string.IsNullOrEmpty(u.Email))
+            if (emailFallback && primaryEmail is not null)
             {
                 log.LogInformation("Email fallback for {User} (mode={Mode}, live={Live}, messaging={Msg})",
                     u.Id, u.NotifyMode, live, hasMessaging);
-                try { await Deliver("email", u.Email!, evt, ct); }
+                try { await Deliver("email", primaryEmail, evt, ct); }
                 catch (Exception ex) { log.LogWarning(ex, "Email fallback failed for {User}", u.Id); }
             }
         }

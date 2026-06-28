@@ -1,6 +1,6 @@
 namespace AgentPlatform.Core.Contracts;
 
-public record GroupMember(string UserId, string DisplayName, string? Email, string? PreferredChannel);
+public record GroupMember(string UserId, string DisplayName, string? PreferredChannel);
 
 /// <summary>Resolves group members and matches them by name (for "going with Agatha and Ola").</summary>
 public interface IGroupDirectory

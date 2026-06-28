@@ -219,10 +219,9 @@ public sealed class AgentPipeline(
     private async Task<UserGroupInfo?> ResolveUserAsync(InputMessage msg, CancellationToken ct) =>
         msg.ChannelId switch
         {
-            // "http" carries the platform user id directly; "email" is a person attribute.
+            // "http" carries the platform user id directly.
             "http" => await userRepo.GetPrimaryGroupAsync(msg.UserId, ct),
-            "email" => await userRepo.GetByEmailAsync(msg.UserId, ct),
-            // Every messaging channel (telegram, signal, …) resolves via its generic channel identity.
+            // Every messaging channel (telegram, signal, email, …) resolves via its generic channel identity.
             _ => await userRepo.GetByChannelIdentityAsync(msg.ChannelId, msg.UserId, ct)
         };
 

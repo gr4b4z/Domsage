@@ -26,9 +26,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().HasKey(x => x.Id);
-        b.Entity<User>().HasIndex(x => x.Email).IsUnique();
 
-        // Generic messaging-channel bindings (replaces per-channel columns on users).
+        // Generic messaging-channel bindings (replaces per-channel columns on users; email lives here too).
         b.Entity<ChannelIdentity>().HasKey(x => x.Id);
         b.Entity<ChannelIdentity>().HasIndex(x => new { x.ChannelId, x.ExternalId }).IsUnique();
         b.Entity<ChannelIdentity>().HasIndex(x => new { x.UserId, x.ChannelId });

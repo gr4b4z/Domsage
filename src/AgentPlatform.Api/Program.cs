@@ -224,18 +224,21 @@ app.MapGet("/api/plugins/ui", async (
 app.MapGet("/api/me", async (
     [FromServices] UserTokenAuthenticator auth,
     [FromServices] IOptions<AgentPlatform.Plugins.Telegram.TelegramOptions> tg,
+    [FromServices] IOptions<AgentPlatform.Plugins.Email.EmailOptions> em,
     HttpContext ctx, CancellationToken ct) =>
 {
     var s = await Authenticate(ctx, auth, ct);
     // Linking is only usable when a bot token is set AND polling is on (the /start handler lives in the poller).
     var telegramLinkable = !string.IsNullOrEmpty(tg.Value.BotToken) && tg.Value.UsePolling;
+    // Email linking needs SMTP configured (to mail the verification code).
+    var emailLinkable = !string.IsNullOrEmpty(em.Value.SmtpHost) && !string.IsNullOrEmpty(em.Value.FromAddress);
     return s is null ? Results.Unauthorized()
         : Results.Ok(new
         {
             s.UserId, s.Name, s.GroupId, s.GroupType,
             isInvite = s.TokenLabel == "invite",
             isAdmin = s.UserRole == MemberRole.Admin,
-            telegramLinkable
+            telegramLinkable, emailLinkable
         });
 });
 
@@ -252,6 +255,43 @@ app.MapPost("/api/me/telegram-link", async (
     var botUsername = tg.Value.BotUsername;
     var deepLink = string.IsNullOrEmpty(botUsername) ? null : $"https://t.me/{botUsername}?start={code}";
     return Results.Ok(new { code, command = $"/start {code}", deepLink, botUsername });
+});
+
+// Self-service email linking — step 1: mail a verification code to the address being claimed.
+app.MapPost("/api/me/email/request", async (
+    [FromBody] EmailLinkRequest body,
+    [FromServices] UserTokenAuthenticator auth,
+    [FromServices] AgentPlatform.Plugins.Email.EmailLinkStore links,
+    [FromServices] AgentPlatform.Plugins.Email.EmailSender sender,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    var addr = body.Address?.Trim() ?? "";
+    if (!addr.Contains('@')) return Results.BadRequest(new { error = "invalid address" });
+
+    var code = links.Mint(s.UserId, addr);
+    await sender.SendAsync(addr, "[Agent] Kod weryfikacyjny",
+        $"Twój kod do połączenia tego adresu z domowym asystentem: {code}\n(Ważny 15 minut.)", null, ct);
+    return Results.Ok(new { sent = true }); // never reveal the code in the response
+});
+
+// Self-service email linking — step 2: confirm with the code → adds the verified address.
+app.MapPost("/api/me/email/confirm", async (
+    [FromBody] EmailLinkConfirm body,
+    [FromServices] UserTokenAuthenticator auth,
+    [FromServices] AgentPlatform.Plugins.Email.EmailLinkStore links,
+    [FromServices] IUserRepository users,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    var pending = links.Consume(body.Code ?? "");
+    if (pending is null || pending.Value.UserId != s.UserId)
+        return Results.Ok(new { ok = false, message = "Kod nieprawidłowy lub wygasł." });
+
+    var ok = await users.AddEmailIdentityAsync(s.UserId, pending.Value.Address, makePrimary: false, ct);
+    return Results.Ok(new { ok, address = pending.Value.Address });
 });
 
 app.MapPost("/api/chat", async (

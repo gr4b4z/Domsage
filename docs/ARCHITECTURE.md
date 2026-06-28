@@ -154,16 +154,20 @@ number, an email, or — for web — the platform user id). `ResolveUserAsync` m
 flowchart LR
     M[InputMessage<br/>channelId + externalId] --> S{channelId}
     S -->|http| U1[GetPrimaryGroup userId]
-    S -->|email| U2[GetByEmail]
-    S -->|telegram / signal / …| U3[GetByChannelIdentity<br/>channel_id + external_id]
-    U1 & U2 & U3 --> UG[UserGroupInfo<br/>userId + groupId + role]
+    S -->|telegram / signal / email / …| U3[GetByChannelIdentity<br/>channel_id + external_id]
+    U1 & U3 --> UG[UserGroupInfo<br/>userId + groupId + role]
     UG --> EC[ExecutionContext]
 ```
 
-- **Channel identities are generic.** Messaging accounts live in a `channel_identities(channel_id,
-  external_id, user_id)` table — the core has **no per-channel columns** on `users`. A new channel plugin
-  needs zero schema changes; one external id maps to exactly one user, and each user links their own
-  accounts (in-chat, or via the `link-telegram` CLI). `email` stays a person attribute.
+- **Channel identities are generic.** Messaging accounts — including **email** — live in a
+  `channel_identities(channel_id, external_id, user_id, is_primary)` table; the core has **no per-channel
+  columns** on `users`. A new channel plugin needs zero schema changes; `unique(channel_id, external_id)`
+  enforces "one external id ↦ one user" at the DB level. Users link their own accounts (in-chat, or via
+  the `link-telegram` / `link-email` CLI).
+- **Email can be many per user.** A user may have several email addresses (all `channel_id="email"` rows);
+  one is `is_primary` and used for agent-initiated outbound (notifications). Inbound from *any* of them
+  resolves to the user, and replies go back to the exact address used. `http` (the platform user id) is
+  the only non-identity case.
 - **Primary group** = the user's oldest-joined group. The resulting `ExecutionContext` carries `UserId`,
   `GroupId`, `GroupType`, and `UserRole` for the rest of the pipeline.
 - **Unknown senders** are rejected before any work happens.
