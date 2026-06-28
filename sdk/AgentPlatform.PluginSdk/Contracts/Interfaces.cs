@@ -75,10 +75,17 @@ public interface IBlobStorage
 /// <summary>Maps external identifiers to internal user+group. Used by pipeline and channel plugins.</summary>
 public interface IUserRepository
 {
-    Task<UserGroupInfo?> GetByTelegramIdAsync(long telegramId, CancellationToken ct);
-    Task<UserGroupInfo?> GetBySignalNumberAsync(string phoneNumber, CancellationToken ct);
+    /// <summary>Resolves a user by a messaging-channel identity (e.g. ("telegram","12345")). Core stays
+    /// channel-agnostic — any plugin channel uses the same generic lookup, no per-channel column or method.</summary>
+    Task<UserGroupInfo?> GetByChannelIdentityAsync(string channelId, string externalId, CancellationToken ct);
+
+    /// <summary>Email is a person attribute (not a channel binding), so it keeps a dedicated lookup.</summary>
     Task<UserGroupInfo?> GetByEmailAsync(string email, CancellationToken ct);
     Task<UserGroupInfo?> GetPrimaryGroupAsync(string userId, CancellationToken ct);
+
+    /// <summary>Binds a channel identity to a user (account linking). One external id maps to one user;
+    /// one user has one identity per channel. Returns false if the user is unknown.</summary>
+    Task<bool> SetChannelIdentityAsync(string userId, string channelId, string externalId, CancellationToken ct);
 }
 
 /// <summary>Plugin-defined group types. Core only knows groups.type is a string.</summary>

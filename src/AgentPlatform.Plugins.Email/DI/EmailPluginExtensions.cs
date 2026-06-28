@@ -12,6 +12,7 @@ public static class EmailPluginExtensions
         services.AddScoped<EmailParser>();
         services.AddSingleton<EmailSender>();
         services.AddScoped<ImapPoller>();
+        services.AddScoped<IScheduledJob, ImapPoller>();
         services.AddSingleton<EmailChannelPlugin>();
         services.AddSingleton<IChannelPlugin>(sp => sp.GetRequiredService<EmailChannelPlugin>());
         return services;

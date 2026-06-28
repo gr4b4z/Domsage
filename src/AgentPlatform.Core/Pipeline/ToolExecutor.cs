@@ -89,6 +89,8 @@ public sealed class ToolExecutor(
         await dlq.WriteAsync(ctx.GroupId, plan.ToolId, plan.ToolInput.GetRawText(),
             result.ErrorMessage ?? "Tool failed", "terminal", ct);
         throw new TerminalToolException(result.ErrorMessage ?? "Tool failed",
-            userMessage: "Akcja nie powiodła się.");
+            // A tool that returns a friendly HumanMessage with a Failed status (e.g. a user-input
+            // rejection like "this time is in the past") wants that message shown, not a generic error.
+            userMessage: result.HumanMessage ?? "Akcja nie powiodła się.");
     }
 }

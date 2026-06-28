@@ -110,6 +110,11 @@ public interface IRenewalsRepository
 {
     Task<Guid> AddAsync(Renewal renewal, CancellationToken ct);
     Task<IReadOnlyList<Renewal>> ListUpcomingAsync(Guid groupId, CancellationToken ct);
+    Task<IReadOnlyList<Renewal>> DueForReminderAsync(Guid groupId, CancellationToken ct);
+    Task<IReadOnlyList<Renewal>> DueForEscalationAsync(Guid groupId, CancellationToken ct);
+    Task MarkRemindedAsync(Guid id, CancellationToken ct);
+    Task MarkEscalatedAsync(Guid id, CancellationToken ct);
+    Task<bool> MarkRenewedAsync(Guid id, CancellationToken ct);
 }
 
 public sealed class RenewalsRepository(FamilyDbContext db) : IRenewalsRepository
@@ -124,6 +129,42 @@ public sealed class RenewalsRepository(FamilyDbContext db) : IRenewalsRepository
         await db.Renewals.AsNoTracking()
             .Where(r => r.GroupId == groupId && r.Status == "active")
             .OrderBy(r => r.ExpiresOn).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Renewal>> DueForReminderAsync(Guid groupId, CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var horizon = today.AddDays(90);
+        var candidates = await db.Renewals
+            .Where(r => r.GroupId == groupId && r.Status == "active" && r.LastRemindedAt == null && r.ExpiresOn <= horizon)
+            .ToListAsync(ct);
+        return candidates.Where(r => r.ExpiresOn <= today.AddDays(r.LeadDays)).ToList();
+    }
+
+    public async Task<IReadOnlyList<Renewal>> DueForEscalationAsync(Guid groupId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var candidates = await db.Renewals
+            .Where(r => r.GroupId == groupId && r.Status == "active"
+                && r.LastRemindedAt != null && r.EscalatedAt == null)
+            .ToListAsync(ct);
+        return candidates.Where(r => r.LastRemindedAt <= now.AddDays(-r.EscalateDays)).ToList();
+    }
+
+    public Task MarkRemindedAsync(Guid id, CancellationToken ct) =>
+        db.Renewals.Where(r => r.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.LastRemindedAt, DateTimeOffset.UtcNow), ct);
+
+    public Task MarkEscalatedAsync(Guid id, CancellationToken ct) =>
+        db.Renewals.Where(r => r.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.EscalatedAt, DateTimeOffset.UtcNow), ct);
+
+    // First-wins: only flips an active renewal; returns false if already handled. Stops future scans.
+    public async Task<bool> MarkRenewedAsync(Guid id, CancellationToken ct)
+    {
+        var rows = await db.Renewals.Where(r => r.Id == id && r.Status == "active")
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, "renewed"), ct);
+        return rows > 0;
+    }
 }
 
 public interface IChoresRepository

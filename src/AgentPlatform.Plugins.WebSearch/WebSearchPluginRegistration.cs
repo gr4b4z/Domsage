@@ -11,6 +11,12 @@ public sealed class WebSearchPluginRegistration : IPluginRegistration
 
     public void Register(IServiceCollection services, IConfiguration config)
     {
+        // Web search is opt-in. When disabled (default), the web.answer_question intent isn't registered,
+        // so general-knowledge questions fall through to the conversational responder (answered from the
+        // model's own knowledge) instead of requiring a search backend. Enable with Plugins:WebSearch:Enabled=true.
+        if (!config.GetValue("Enabled", false))
+            return;
+
         var strategy = config["RotationStrategy"] ?? "round-robin";
         if (strategy == "random") services.AddSingleton<IKeyRotationStrategy, RandomKeyStrategy>();
         else services.AddSingleton<IKeyRotationStrategy, RoundRobinKeyStrategy>();

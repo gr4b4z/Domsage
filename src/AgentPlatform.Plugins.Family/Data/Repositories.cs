@@ -10,6 +10,11 @@ public interface IPaymentsRepository
     Task<bool> MarkPaidAsync(Guid id, Guid userId, string idempotencyKey, CancellationToken ct);
     Task<IReadOnlyList<Payment>> ListDueAsync(Guid groupId, CancellationToken ct);
     Task<IReadOnlyList<Payment>> ListAllAsync(Guid groupId, CancellationToken ct);
+    // Reminder/escalation scan (per group).
+    Task<IReadOnlyList<Payment>> DueForReminderAsync(Guid groupId, CancellationToken ct);
+    Task<IReadOnlyList<Payment>> DueForEscalationAsync(Guid groupId, TimeSpan escalateAfter, CancellationToken ct);
+    Task MarkRemindedAsync(Guid id, CancellationToken ct);
+    Task MarkEscalatedAsync(Guid id, CancellationToken ct);
 }
 
 public sealed class PaymentsRepository(FamilyDbContext db) : IPaymentsRepository
@@ -53,6 +58,33 @@ public sealed class PaymentsRepository(FamilyDbContext db) : IPaymentsRepository
             .Where(p => p.GroupId == groupId)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Payment>> DueForReminderAsync(Guid groupId, CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var horizon = today.AddDays(60); // bound the scan; per-payment lead applied in memory
+        var candidates = await db.Payments
+            .Where(p => p.GroupId == groupId && p.Status == "pending" && p.RemindedAt == null && p.DueDate <= horizon)
+            .ToListAsync(ct);
+        return candidates.Where(p => p.DueDate <= today.AddDays(p.LeadDays)).ToList();
+    }
+
+    public async Task<IReadOnlyList<Payment>> DueForEscalationAsync(Guid groupId, TimeSpan escalateAfter, CancellationToken ct)
+    {
+        var cutoff = DateTimeOffset.UtcNow - escalateAfter;
+        return await db.Payments
+            .Where(p => p.GroupId == groupId && p.Status == "pending"
+                && p.RemindedAt != null && p.EscalatedAt == null && p.RemindedAt <= cutoff)
+            .ToListAsync(ct);
+    }
+
+    public Task MarkRemindedAsync(Guid id, CancellationToken ct) =>
+        db.Payments.Where(p => p.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.RemindedAt, DateTimeOffset.UtcNow), ct);
+
+    public Task MarkEscalatedAsync(Guid id, CancellationToken ct) =>
+        db.Payments.Where(p => p.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.EscalatedAt, DateTimeOffset.UtcNow), ct);
 }
 
 public interface ITasksRepository

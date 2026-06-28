@@ -26,7 +26,7 @@ public class ConversationResolverTests
         };
         var resolver = new ConversationResolver(repo);
         var msg = new InputMessage("m", "test", "u", null, "/start", null, DateTimeOffset.UtcNow);
-        var ctx = await resolver.ResolveAsync(msg, CancellationToken.None);
+        var ctx = await resolver.ResolveAsync(msg, "u", null, CancellationToken.None);
         Assert.Contains(repo.Closed, c => c.reason == "user_reset");
         Assert.Single(repo.Created);
         Assert.False(ctx.IsIncognito);
@@ -38,7 +38,7 @@ public class ConversationResolverTests
         var repo = new FakeConversationRepository();
         var resolver = new ConversationResolver(repo);
         var msg = new InputMessage("m", "test", "u", null, "/incognito", null, DateTimeOffset.UtcNow);
-        var ctx = await resolver.ResolveAsync(msg, CancellationToken.None);
+        var ctx = await resolver.ResolveAsync(msg, "u", null, CancellationToken.None);
         Assert.True(ctx.IsIncognito);
     }
 }

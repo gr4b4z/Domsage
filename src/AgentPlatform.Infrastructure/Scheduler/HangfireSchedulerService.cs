@@ -72,10 +72,14 @@ public sealed class HangfireSchedulerService(
     }
 }
 
-/// <summary>Hangfire job target — resolves recipients and publishes reminder messages to the bus.</summary>
+/// <summary>
+/// Hangfire job target — resolves recipients and DELIVERS the reminder to them (web SSE + their
+/// messaging channel) via the notification service. A reminder is outbound: it is pushed to the
+/// user, not re-injected into the bus as if it were an inbound message.
+/// </summary>
 public sealed class ReminderDispatcher(
     AppDbContext db,
-    IMessageBus bus,
+    INotificationService notifier,
     ILogger<ReminderDispatcher> log)
 {
     public async Task FireAsync(Guid jobId, CancellationToken ct)
@@ -86,26 +90,23 @@ public sealed class ReminderDispatcher(
         using var doc = JsonDocument.Parse(job.Payload);
         var text = doc.RootElement.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
 
-        var recipients = new List<(string UserId, string Channel)>();
+        var recipients = new List<string>();
         if (job.UserId is { } uid)
         {
-            var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == uid, ct);
-            if (u is not null) recipients.Add((u.Id.ToString(), u.PreferredChannel ?? "http"));
+            recipients.Add(uid.ToString());
         }
         else if (job.GroupId is { } gid)
         {
             var members = await db.GroupMembers.AsNoTracking()
                 .Where(m => m.GroupId == gid)
-                .Join(db.Users.AsNoTracking(), m => m.UserId, u => u.Id, (m, u) => u)
+                .Select(m => m.UserId.ToString())
                 .ToListAsync(ct);
-            recipients.AddRange(members.Select(u => (u.Id.ToString(), u.PreferredChannel ?? "http")));
+            recipients.AddRange(members);
         }
 
-        foreach (var (userId, channel) in recipients)
-        {
-            var body = JsonSerializer.Serialize(new { MessageId = Guid.NewGuid().ToString(), UserId = userId, GroupId = job.GroupId?.ToString() ?? "", Text = text });
-            await bus.PublishAsync(new RawEvent(channel, body), ct);
-        }
+        if (recipients.Count > 0)
+            await notifier.NotifyUsersAsync(recipients,
+                new LiveEvent("reminder", "⏰ Przypomnienie", text), ct);
 
         // Reschedule recurring jobs.
         if (!string.IsNullOrEmpty(job.RRule))

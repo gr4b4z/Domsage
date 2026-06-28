@@ -6,13 +6,22 @@ namespace AgentPlatform.Infrastructure.Postgres.Entities;
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public long? TelegramId { get; set; }
-    public string? SignalNumber { get; set; }
-    public string? Email { get; set; }
+    public string? Email { get; set; } // person attribute (not a channel binding)
     public string DisplayName { get; set; } = "";
     public string Timezone { get; set; } = "Europe/Warsaw";
     public string? PreferredChannel { get; set; }
+    /// <summary>How to deliver notifications: "auto" (SSE→messaging→email fallback), "email" (always also email), "silent" (web SSE only).</summary>
+    public string NotifyMode { get; set; } = "auto";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+[Table("channel_identities")]
+public class ChannelIdentity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string ChannelId { get; set; } = "";  // "telegram", "signal", … (a plugin's channel)
+    public string ExternalId { get; set; } = ""; // chat id / phone number on that channel
+    public Guid UserId { get; set; }
 }
 
 [Table("user_tokens")]

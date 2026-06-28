@@ -86,9 +86,14 @@ public sealed class EmailSender(IOptions<EmailOptions> options)
 
 /// <summary>Hangfire recurring job — polls IMAP for unseen messages and publishes to the bus.</summary>
 public sealed class ImapPoller(EmailParser parser, IMessageBus bus, IOptions<EmailOptions> options,
-    ILogger<ImapPoller> log)
+    ILogger<ImapPoller> log) : IScheduledJob
 {
     private readonly EmailOptions _o = options.Value;
+
+    public string JobId => "email.imap-poll";
+    public string Cron => "*/2 * * * *";
+    public Task RunAsync(CancellationToken ct) => PollAsync(ct);
+
     public async Task PollAsync(CancellationToken ct)
     {
         if (string.IsNullOrEmpty(_o.ImapHost)) return;

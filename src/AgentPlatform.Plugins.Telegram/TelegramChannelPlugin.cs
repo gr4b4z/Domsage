@@ -11,6 +11,10 @@ public sealed class TelegramOptions
     public string BotToken { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
     public string WebhookUrl { get; set; } = "";
+    /// <summary>Bot @username (without @) — used to build the t.me deep link for account linking.</summary>
+    public string BotUsername { get; set; } = "";
+    /// <summary>When true, a recurring job long-polls getUpdates (no public webhook needed — ideal for local testing).</summary>
+    public bool UsePolling { get; set; } = false;
 }
 
 /// <summary>

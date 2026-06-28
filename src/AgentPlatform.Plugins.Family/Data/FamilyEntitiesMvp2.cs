@@ -39,6 +39,7 @@ public class Renewal
     public int EscalateDays { get; set; } = 7;
     public string Status { get; set; } = "active";
     public DateTimeOffset? LastRemindedAt { get; set; }
+    public DateTimeOffset? EscalatedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 

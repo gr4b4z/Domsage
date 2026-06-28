@@ -32,7 +32,7 @@ say "Setup: reset DB + init admin"
 docker exec -i "$PG_CONTAINER" psql -U app -d agentplatform -c "TRUNCATE users CASCADE;" >/dev/null 2>&1
 # family.* + audit are separate tables — clear what the flows touch
 docker exec -i "$PG_CONTAINER" psql -U app -d agentplatform -c \
-  "TRUNCATE family.payments, family.tasks, family.shopping_items, family.renewals, audit_log, usage_meter_events, pending_confirmations, conversations, conversation_messages, budget_states RESTART IDENTITY CASCADE;" >/dev/null 2>&1
+  "TRUNCATE family.payments, family.tasks, family.shopping_items, family.renewals, scheduler_jobs, audit_log, usage_meter_events, pending_confirmations, conversations, conversation_messages, budget_states RESTART IDENTITY CASCADE;" >/dev/null 2>&1
 
 SETUP=$(curl -s -X POST "$BASE/api/setup/init" -H "Content-Type: application/json" -d '{"name":"Sylwester","groupName":"Dom"}')
 KEY=$(printf '%s' "$SETUP" | sed -n 's/.*#key=\([^"]*\)".*/\1/p')
@@ -89,6 +89,25 @@ say "Renewals"
 R=$(chat '"dodaj przypomnienie: OC samochodu wygasa 2026-09-30"')
 assert "add_renewal acts" "$R" "OC"
 
+# ── 5b. Personal timed reminders (set_reminder -> scheduler job) ─────────────
+say "Reminders"
+psql_t(){ docker exec -i "$PG_CONTAINER" psql -U app -d agentplatform -t -c "$1" 2>/dev/null | tr -d '[:space:]'; }
+R=$(chat '"przypomnij mi jutro o 14 odebrać córkę ze szkoły"')
+assert "set_reminder confirms"         "$R" "Przypomnę"
+assert "reminder echoes the task"      "$R" "córk"
+# A one-off scheduler job was persisted for this user (group_id NULL = personal).
+JOBROW=$(psql_t "select status||'|'||coalesce(group_id::text,'NULL') from scheduler_jobs where job_type='reminder' and payload->>'text' like '%órk%' order by next_run_at desc limit 1;")
+assert "reminder job persisted active" "$JOBROW" "active"
+assert "reminder is personal (no group)" "$JOBROW" "NULL"
+# Recurring reminder -> r_rule set.
+R=$(chat '"przypomnij mi codziennie o 7:00 wziąć tabletki"')
+assert "recurring reminder confirms"   "$R" "codziennie"
+RR=$(psql_t "select r_rule from scheduler_jobs where payload->>'text' like '%tabletki%' order by next_run_at desc limit 1;")
+assert "recurring stores FREQ=DAILY"   "$RR" "FREQ=DAILY"
+# Past time is rejected with a friendly message (not a generic error).
+R=$(chat '"przypomnij mi wczoraj o 8 zadzwonić do banku"')
+assert "past-time reminder rejected"   "$R" "minął"
+
 # ── 6. Long-term memory fact ──────────────────────────────────────────────────
 say "Memory facts"
 R=$(chat '"zapamiętaj że mój numer licznika prądu to 123456"')
@@ -123,6 +142,18 @@ assert "second check -> not ok (first-wins)" "$(action "{\"tool\":\"family.shopp
 assert "uncheck -> ok"                "$(action "{\"tool\":\"family.shopping.uncheck\",\"input\":{\"itemId\":\"$IID\"}}")" '"ok":true'
 assert "plugins/ui lists family"      "$(curl -s "$BASE/api/plugins/ui" -H "X-Api-Key: $KEY")" '"pluginId":"family"'
 assert "plugin UI served from DLL"    "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/plugins/family/shopping/index.html")" "200"
+
+# ── 8c. Ack-action target: renewal "✅ Odnowione" runs mark_renewed via /api/action ──
+# Mirrors tapping the confirm button on a renewal reminder notification. Self-contained: creates
+# its own renewal deterministically (no LLM) so it doesn't depend on earlier state.
+say "Ack action (notification confirm button)"
+action '{"tool":"family.renewals.add","input":{"label":"Domena WWW","expiresOn":"2026-12-01"}}' >/dev/null
+RID=$(psql_t "select id from family.renewals where label='Domena WWW' order by created_at desc limit 1;")
+[ -n "$RID" ] && ok "renewal id from DB" || bad "renewal id from DB" "(none)"
+# Deterministic: first mark wins ("Oznaczono"), a repeat sees no active row ("Było już") — which can
+# only happen if the status actually flipped. (Avoids a racy status re-read.)
+assert "mark_renewed -> ok"           "$(action "{\"tool\":\"family.renewals.mark_renewed\",\"input\":{\"renewalId\":\"$RID\"}}")" "Oznaczono jako odnowione"
+assert "second mark_renewed -> already (first-wins)" "$(action "{\"tool\":\"family.renewals.mark_renewed\",\"input\":{\"renewalId\":\"$RID\"}}")" "Było już"
 
 # ── 9. Admin dashboard reflects activity ─────────────────────────────────────
 say "Admin stats"

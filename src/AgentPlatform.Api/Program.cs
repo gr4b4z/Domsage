@@ -56,7 +56,7 @@ new AgentPlatform.Plugins.Business.WorkspacePluginRegistration()
     .Register(builder.Services, builder.Configuration.GetSection("Plugins:Workspace"));
 
 // Known plugin namespaces for contract validation.
-builder.Services.AddSingleton(new PluginNamespaces(["family", "web", "workspace"]));
+builder.Services.AddSingleton(new PluginNamespaces(["family", "web", "workspace", "telegram"]));
 
 // 6. Scheduler (Hangfire)
 var connStr = builder.Configuration.GetConnectionString("Postgres")
@@ -95,9 +95,13 @@ foreach (var ns in app.Services.GetRequiredService<PluginNamespaces>().Namespace
 using (var validateScope = app.Services.CreateScope())
     registry.ValidateContracts(validateScope.ServiceProvider);
 
-// IMAP polling every 2 minutes when email is configured.
-if (!string.IsNullOrEmpty(builder.Configuration["Email:ImapHost"]))
-    RecurringJob.AddOrUpdate<ImapPoller>("imap-poll", p => p.PollAsync(CancellationToken.None), "*/2 * * * *");
+// Recurring jobs — discovered generically from any plugin's IScheduledJob. The host has no
+// knowledge of specific plugins; each job (id + cron + work) ships in its plugin DLL.
+var recurring = app.Services.GetRequiredService<IRecurringJobManager>();
+using (var jobScope = app.Services.CreateScope())
+    foreach (var job in jobScope.ServiceProvider.GetServices<IScheduledJob>())
+        recurring.AddOrUpdate<AgentPlatform.Core.Scheduler.ScheduledJobRunner>(
+            job.JobId, r => r.RunAsync(job.JobId, CancellationToken.None), job.Cron);
 
 app.UseDefaultFiles();   // map "/" -> wwwroot/index.html (web chat entry)
 app.UseStaticFiles();
@@ -121,26 +125,20 @@ async Task<AuthResult?> Authenticate(HttpContext ctx, UserTokenAuthenticator aut
     return await auth.AuthenticateAsync(token, ct);
 }
 
-app.MapPost("/webhook/telegram", async (
-    HttpRequest req, [FromServices] IMessageBus bus,
-    [FromServices] IOptions<TelegramOptions> opts, CancellationToken ct) =>
+// Plugin-owned public webhooks: every IWebhookHandler maps its own route. The host stays generic —
+// it knows nothing about Telegram/Stripe/etc.; the plugin validates its own secret and handles the body.
+foreach (var wh in app.Services.GetServices<IWebhookHandler>())
 {
-    var secret = req.Headers["X-Telegram-Bot-Api-Secret-Token"].FirstOrDefault();
-    if (!string.IsNullOrEmpty(opts.Value.WebhookSecret) && secret != opts.Value.WebhookSecret)
-        return Results.Unauthorized();
-    using var reader = new StreamReader(req.Body);
-    var body = await reader.ReadToEndAsync(ct);
-    await bus.PublishAsync(new RawEvent("telegram", body), ct);
-    return Results.Ok();
-});
-
-app.MapPost("/webhook/signal", async (HttpRequest req, [FromServices] IMessageBus bus, CancellationToken ct) =>
-{
-    using var reader = new StreamReader(req.Body);
-    var body = await reader.ReadToEndAsync(ct);
-    await bus.PublishAsync(new RawEvent("signal", body), ct);
-    return Results.Ok();
-});
+    var handler = wh; // singletons, captured for the endpoint closure
+    app.MapPost(handler.Route, async (HttpRequest req, CancellationToken ct) =>
+    {
+        using var reader = new StreamReader(req.Body);
+        var body = await reader.ReadToEndAsync(ct);
+        var headers = req.Headers.ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        var res = await handler.HandleAsync(new WebhookRequest(headers, body), ct);
+        return res.Body is null ? Results.StatusCode(res.StatusCode) : Results.Content(res.Body, statusCode: res.StatusCode);
+    });
+}
 
 // Server-Sent Events — live web-chat updates (shopping notifications, etc.)
 app.MapGet("/api/stream", async (HttpContext ctx, UserTokenAuthenticator auth,
@@ -224,16 +222,36 @@ app.MapGet("/api/plugins/ui", async (
 });
 
 app.MapGet("/api/me", async (
-    [FromServices] UserTokenAuthenticator auth, HttpContext ctx, CancellationToken ct) =>
+    [FromServices] UserTokenAuthenticator auth,
+    [FromServices] IOptions<AgentPlatform.Plugins.Telegram.TelegramOptions> tg,
+    HttpContext ctx, CancellationToken ct) =>
 {
     var s = await Authenticate(ctx, auth, ct);
+    // Linking is only usable when a bot token is set AND polling is on (the /start handler lives in the poller).
+    var telegramLinkable = !string.IsNullOrEmpty(tg.Value.BotToken) && tg.Value.UsePolling;
     return s is null ? Results.Unauthorized()
         : Results.Ok(new
         {
             s.UserId, s.Name, s.GroupId, s.GroupType,
             isInvite = s.TokenLabel == "invite",
-            isAdmin = s.UserRole == MemberRole.Admin
+            isAdmin = s.UserRole == MemberRole.Admin,
+            telegramLinkable
         });
+});
+
+// Mint a one-time code to link this user's Telegram chat: send "/start <code>" to the bot.
+app.MapPost("/api/me/telegram-link", async (
+    [FromServices] UserTokenAuthenticator auth,
+    [FromServices] AgentPlatform.Plugins.Telegram.TelegramLinkStore links,
+    [FromServices] IOptions<AgentPlatform.Plugins.Telegram.TelegramOptions> tg,
+    HttpContext ctx, CancellationToken ct) =>
+{
+    var s = await Authenticate(ctx, auth, ct);
+    if (s is null) return Results.Unauthorized();
+    var code = links.Mint(s.UserId);
+    var botUsername = tg.Value.BotUsername;
+    var deepLink = string.IsNullOrEmpty(botUsername) ? null : $"https://t.me/{botUsername}?start={code}";
+    return Results.Ok(new { code, command = $"/start {code}", deepLink, botUsername });
 });
 
 app.MapPost("/api/chat", async (

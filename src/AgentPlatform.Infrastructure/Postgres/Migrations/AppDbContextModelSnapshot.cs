@@ -171,6 +171,40 @@ namespace AgentPlatform.Infrastructure.Postgres.Migrations
                     b.ToTable("budget_states", (string)null);
                 });
 
+            modelBuilder.Entity("AgentPlatform.Infrastructure.Postgres.Entities.ChannelIdentity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ChannelId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("channel_id");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_channel_identities");
+
+                    b.HasIndex("ChannelId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_channel_identities_channel_id_external_id");
+
+                    b.HasIndex("UserId", "ChannelId")
+                        .HasDatabaseName("ix_channel_identities_user_id_channel_id");
+
+                    b.ToTable("channel_identities", (string)null);
+                });
+
             modelBuilder.Entity("AgentPlatform.Infrastructure.Postgres.Entities.ConversationEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -789,17 +823,14 @@ namespace AgentPlatform.Infrastructure.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("email");
 
+                    b.Property<string>("NotifyMode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("notify_mode");
+
                     b.Property<string>("PreferredChannel")
                         .HasColumnType("text")
                         .HasColumnName("preferred_channel");
-
-                    b.Property<string>("SignalNumber")
-                        .HasColumnType("text")
-                        .HasColumnName("signal_number");
-
-                    b.Property<long?>("TelegramId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("telegram_id");
 
                     b.Property<string>("Timezone")
                         .IsRequired()
@@ -812,14 +843,6 @@ namespace AgentPlatform.Infrastructure.Postgres.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
-
-                    b.HasIndex("SignalNumber")
-                        .IsUnique()
-                        .HasDatabaseName("ix_users_signal_number");
-
-                    b.HasIndex("TelegramId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_users_telegram_id");
 
                     b.ToTable("users", (string)null);
                 });

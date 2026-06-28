@@ -11,4 +11,8 @@
     <PackageReference Include="Spectre.Console" Version="0.57.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentPlatform.Infrastructure\AgentPlatform.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -8,11 +8,13 @@ namespace AgentPlatform.Infrastructure.Repositories;
 
 public sealed class UserRepository(AppDbContext db) : IUserRepository
 {
-    public Task<UserGroupInfo?> GetByTelegramIdAsync(long telegramId, CancellationToken ct) =>
-        ResolveAsync(u => u.TelegramId == telegramId, ct);
-
-    public Task<UserGroupInfo?> GetBySignalNumberAsync(string phoneNumber, CancellationToken ct) =>
-        ResolveAsync(u => u.SignalNumber == phoneNumber, ct);
+    public async Task<UserGroupInfo?> GetByChannelIdentityAsync(string channelId, string externalId, CancellationToken ct)
+    {
+        var uid = await db.ChannelIdentities.AsNoTracking()
+            .Where(c => c.ChannelId == channelId && c.ExternalId == externalId)
+            .Select(c => (Guid?)c.UserId).FirstOrDefaultAsync(ct);
+        return uid is null ? null : await ResolveAsync(u => u.Id == uid, ct);
+    }
 
     public Task<UserGroupInfo?> GetByEmailAsync(string email, CancellationToken ct) =>
         ResolveAsync(u => u.Email == email, ct);
@@ -21,6 +23,21 @@ public sealed class UserRepository(AppDbContext db) : IUserRepository
     {
         if (!Guid.TryParse(userId, out var uid)) return null;
         return await ResolveAsync(u => u.Id == uid, ct);
+    }
+
+    public async Task<bool> SetChannelIdentityAsync(string userId, string channelId, string externalId, CancellationToken ct)
+    {
+        if (!Guid.TryParse(userId, out var uid)) return false;
+        if (!await db.Users.AnyAsync(u => u.Id == uid, ct)) return false;
+
+        // One external id maps to one user; one user has one identity per channel — clear both, then bind.
+        await db.ChannelIdentities
+            .Where(c => (c.ChannelId == channelId && c.ExternalId == externalId)
+                     || (c.ChannelId == channelId && c.UserId == uid))
+            .ExecuteDeleteAsync(ct);
+        db.ChannelIdentities.Add(new ChannelIdentity { ChannelId = channelId, ExternalId = externalId, UserId = uid });
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     private async Task<UserGroupInfo?> ResolveAsync(

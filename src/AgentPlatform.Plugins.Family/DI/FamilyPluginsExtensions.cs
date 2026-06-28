@@ -44,6 +44,11 @@ public static class FamilyPluginsExtensions
         services.AddScoped<IChoresRepository, ChoresRepository>();
         services.AddScoped<IInvoiceDocumentRepository, InvoiceDocumentRepository>();
 
+        // Reminder/escalation scanner (driven by a recurring Hangfire job in the host).
+        services.AddOptions<Reminders.ReminderOptions>();
+        services.AddScoped<Reminders.ReminderScanner>();
+        services.AddScoped<IScheduledJob, Reminders.ReminderScanner>();
+
         return services;
     }
 }

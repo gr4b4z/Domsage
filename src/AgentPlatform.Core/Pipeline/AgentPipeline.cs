@@ -16,6 +16,7 @@ public sealed class AgentPipeline(
     IExecutionContextAccessor execAccessor,
     ConversationResolver convResolver,
     IntentRouter intentRouter,
+    SmalltalkResponder smalltalk,
     ContextBuilder contextBuilder,
     Planner planner,
     ActionValidator validator,
@@ -50,7 +51,7 @@ public sealed class AgentPipeline(
                 return;
             }
 
-            var convCtx = await convResolver.ResolveAsync(msg, ct);
+            var convCtx = await convResolver.ResolveAsync(msg, userInfo.UserId, userInfo.GroupId, ct);
 
             ctx = new ExecutionContext(
                 RequestId: requestId, UserId: userInfo.UserId, GroupId: userInfo.GroupId,
@@ -97,8 +98,10 @@ public sealed class AgentPipeline(
                 }
                 if (match.IntentId == "fallback" || !registry.TryGetHandler(match.IntentId, out _))
                 {
-                    responses.Add(new ResponseResult(
-                        "Nie rozumiem tej prośby. Spróbuj inaczej.", false, null, null));
+                    // No specific intent — answer conversationally (greetings, "who are you", chit-chat)
+                    // instead of a blunt "I don't understand". Never invents household facts.
+                    var reply = await smalltalk.RespondAsync(match.RawSegment, ctx, ct);
+                    responses.Add(new ResponseResult(reply, false, null, null));
                     continue;
                 }
 
@@ -216,11 +219,11 @@ public sealed class AgentPipeline(
     private async Task<UserGroupInfo?> ResolveUserAsync(InputMessage msg, CancellationToken ct) =>
         msg.ChannelId switch
         {
-            "telegram" => long.TryParse(msg.UserId, out var tid)
-                ? await userRepo.GetByTelegramIdAsync(tid, ct) : null,
-            "signal" => await userRepo.GetBySignalNumberAsync(msg.UserId, ct),
+            // "http" carries the platform user id directly; "email" is a person attribute.
+            "http" => await userRepo.GetPrimaryGroupAsync(msg.UserId, ct),
             "email" => await userRepo.GetByEmailAsync(msg.UserId, ct),
-            _ => await userRepo.GetPrimaryGroupAsync(msg.UserId, ct)
+            // Every messaging channel (telegram, signal, …) resolves via its generic channel identity.
+            _ => await userRepo.GetByChannelIdentityAsync(msg.ChannelId, msg.UserId, ct)
         };
 
     private static ResponseResult CombineResponses(List<ResponseResult> responses)

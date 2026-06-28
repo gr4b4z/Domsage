@@ -19,6 +19,7 @@ public sealed class IntentRouter(
     IServiceProvider sp,
     IUsageMeter meter,
     BudgetEnforcer budget,
+    IConversationRepository conversations,
     ILogger<IntentRouter> log)
 {
     private const double ClarifyThreshold = 0.55;
@@ -34,6 +35,8 @@ public sealed class IntentRouter(
         if (intentIds.Count == 0)
             return [new IntentMatch("fallback", 1.0, msg.Text, [])];
 
+        var history = await RecentHistoryAsync(ctx, ct);
+
         var system =
             "You are an intent router for a household assistant. Classify the user message into " +
             "one or more of these intents (split multi-intent requests):\n" +
@@ -41,6 +44,7 @@ public sealed class IntentRouter(
             "Guidance: prefer the most specific add/create/list/mark intent that matches the words used. " +
             "Only choose an intent about a received or attached document/invoice when the user explicitly " +
             "says they received, forwarded or attached one. For 'what do I have / owe / need' questions, pick a list_* intent. " +
+            history +
             "Return ONLY JSON: {\"intents\":[{\"intentId\":\"...\",\"confidence\":0.0-1.0,\"segment\":\"...\"}]}. " +
             "If none fit, return intentId \"fallback\".";
 
@@ -67,6 +71,28 @@ public sealed class IntentRouter(
         }
 
         return Parse(result.Content, intentIds, msg.Text);
+    }
+
+    /// <summary>
+    /// Recent conversation turns so the router can resolve elliptical follow-ups ("A pieczarki?",
+    /// "a może jutro?") in context instead of mis-routing them as new commands. Skipped in incognito.
+    /// </summary>
+    private async Task<string> RecentHistoryAsync(ExecutionContext ctx, CancellationToken ct)
+    {
+        if (ctx.IsIncognito || !Guid.TryParse(ctx.ConversationId, out _)) return "";
+        try
+        {
+            var msgs = await conversations.FetchWithinBudgetAsync(ctx.ConversationId, null, 600, ct);
+            if (msgs.Count == 0) return "";
+            // Repo returns newest-first; show the last few chronologically.
+            var lines = msgs.Take(6).Reverse()
+                .Select(m => $"{(m.Role == "user" ? "User" : "Assistant")}: {m.Content}");
+            return "\nRecent conversation (context):\n" + string.Join("\n", lines) + "\n" +
+                "A short follow-up (e.g. just a noun or 'a może…?') usually CONTINUES the topic above — " +
+                "if the previous turn was a question/answer, classify the follow-up the same way (often 'fallback'), " +
+                "NOT as a new add/create command.\n";
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Router history fetch failed"); return ""; }
     }
 
     private IReadOnlyList<IntentMatch> Parse(string? content, List<string> known, string fullText)

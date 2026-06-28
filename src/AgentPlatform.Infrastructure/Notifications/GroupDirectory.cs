@@ -13,10 +13,10 @@ public sealed class GroupDirectory(AppDbContext db) : IGroupDirectory
             from gm in db.GroupMembers.AsNoTracking()
             join u in db.Users.AsNoTracking() on gm.UserId equals u.Id
             where gm.GroupId == gid
-            select new { u.Id, u.DisplayName, u.TelegramId, u.SignalNumber, u.Email, u.PreferredChannel })
+            select new { u.Id, u.DisplayName, u.Email, u.PreferredChannel })
             .ToListAsync(ct);
         return rows.Select(r => new GroupMember(
-            r.Id.ToString(), r.DisplayName, r.TelegramId, r.SignalNumber, r.Email, r.PreferredChannel)).ToList();
+            r.Id.ToString(), r.DisplayName, r.Email, r.PreferredChannel)).ToList();
     }
 
     public async Task<IReadOnlyList<GroupMember>> ResolveByNamesAsync(

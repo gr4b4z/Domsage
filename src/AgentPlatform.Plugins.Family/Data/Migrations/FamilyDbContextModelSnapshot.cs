@@ -154,6 +154,10 @@ namespace AgentPlatform.Plugins.Family.Data.Migrations
                         .HasColumnType("date")
                         .HasColumnName("due_date");
 
+                    b.Property<DateTimeOffset?>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
+
                     b.Property<string>("ExtractedRaw")
                         .HasColumnType("text")
                         .HasColumnName("extracted_raw");
@@ -170,6 +174,10 @@ namespace AgentPlatform.Plugins.Family.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("invoice_doc_id");
 
+                    b.Property<int>("LeadDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("lead_days");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text")
                         .HasColumnName("notes");
@@ -181,6 +189,10 @@ namespace AgentPlatform.Plugins.Family.Data.Migrations
                     b.Property<Guid?>("PaidBy")
                         .HasColumnType("uuid")
                         .HasColumnName("paid_by");
+
+                    b.Property<DateTimeOffset?>("RemindedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reminded_at");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -224,6 +236,10 @@ namespace AgentPlatform.Plugins.Family.Data.Migrations
                     b.Property<int>("EscalateDays")
                         .HasColumnType("integer")
                         .HasColumnName("escalate_days");
+
+                    b.Property<DateTimeOffset?>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
 
                     b.Property<DateOnly>("ExpiresOn")
                         .HasColumnType("date")

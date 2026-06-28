@@ -136,6 +136,10 @@ possible (core has no domain knowledge):
    `/plugins/{pluginId}/...` via `ManifestEmbeddedFileProvider`.
 3. `IPluginUi` (SDK) + `GET /api/plugins/ui` — the plugin declares a launch tile (title/icon/entry);
    the web shell renders tiles dynamically and links to `/plugins/{id}/{entry}#key=…`.
+4. `IScheduledJob` (SDK) — the plugin declares recurring work (`JobId`, `Cron`, `RunAsync`). The host
+   discovers all of them and registers each with the scheduler via a generic `ScheduledJobRunner`
+   (dispatches by id) — `Program.cs` references no plugin job type. The reminder/escalation scan
+   (`family.reminder-scan`) and email IMAP poll (`email.imap-poll`) are both registered this way.
 
 The shopping checklist is the reference: its page lives in `AgentPlatform.Plugins.Family`
 (`wwwroot/shopping/index.html`, embedded), served at `/plugins/family/shopping/index.html`, and talks
@@ -152,6 +156,24 @@ Channel story for tapping:
 - **Telegram** — native inline buttons (one per item → callback → check). Channel supports it; wire when the bot runs.
 - **Signal** ⚠️ — no interactive buttons in signal-cli-rest-api; fall back to numbered text or share the web checklist link.
 - **WhatsApp** ⚠️ — interactive lists exist but the channel is deferred (Meta API cost/approval).
+
+## Reminders + escalation (payments & renewals)
+
+A recurring Hangfire job (`reminder-scan`, hourly) drives proactive reminders — nothing is
+auto-scheduled per item; the scanner finds what's due:
+- **Lead-time reminder**: payment due within `lead_days` (default 3) / renewal within its `lead_days`
+  → broadcast to **all** group members (each on their channel + SSE); sets `reminded_at`/`last_reminded_at`
+  (anti-spam, fires once).
+- **Escalation = re-broadcast to everyone**: if still `pending`/`active` after the window
+  (payments: `PaymentEscalateAfter`, default 24h; renewals: per-renewal `escalate_days`) and not yet
+  escalated → urgent re-broadcast to all members; sets `escalated_at`. First person to `mark_paid`
+  ends it (first-wins). Every reminder/escalation is audited.
+- Per-group RLS context is set as the scanner iterates groups, so it works under a non-superuser DB role.
+
+**Automated regression** (`AgentPlatform.Integration.Tests/ReminderTests`):
+- payment due-within-lead surfaces for reminder (not-due doesn't); after `mark_reminded` it won't
+  re-remind; escalation eligible after the window, fires once; paying removes it from future scans.
+- renewal reminder by lead; escalation not eligible until `escalate_days` elapse.
 
 ## Known limitations / not in automated E2E
 

@@ -12,6 +12,7 @@ public static class SignalPluginExtensions
         services.AddHttpClient<SignalApiClient>();
         services.AddSingleton<SignalChannelPlugin>();
         services.AddSingleton<IChannelPlugin>(sp => sp.GetRequiredService<SignalChannelPlugin>());
+        services.AddSingleton<IWebhookHandler, SignalWebhookHandler>();
         return services;
     }
 }

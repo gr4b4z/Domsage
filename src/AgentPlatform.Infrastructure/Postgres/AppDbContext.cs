@@ -21,13 +21,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ConversationEntity> Conversations => Set<ConversationEntity>();
     public DbSet<ConversationMessageEntity> ConversationMessages => Set<ConversationMessageEntity>();
     public DbSet<MemoryFactEntity> MemoryFacts => Set<MemoryFactEntity>();
+    public DbSet<ChannelIdentity> ChannelIdentities => Set<ChannelIdentity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().HasKey(x => x.Id);
-        b.Entity<User>().HasIndex(x => x.TelegramId).IsUnique();
-        b.Entity<User>().HasIndex(x => x.SignalNumber).IsUnique();
         b.Entity<User>().HasIndex(x => x.Email).IsUnique();
+
+        // Generic messaging-channel bindings (replaces per-channel columns on users).
+        b.Entity<ChannelIdentity>().HasKey(x => x.Id);
+        b.Entity<ChannelIdentity>().HasIndex(x => new { x.ChannelId, x.ExternalId }).IsUnique();
+        b.Entity<ChannelIdentity>().HasIndex(x => new { x.UserId, x.ChannelId });
 
         b.Entity<UserToken>().HasKey(x => x.Id);
         b.Entity<UserToken>().HasIndex(x => x.TokenHash).IsUnique();

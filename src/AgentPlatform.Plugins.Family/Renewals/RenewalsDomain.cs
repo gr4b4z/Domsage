@@ -35,6 +35,26 @@ public sealed class AddRenewalTool(IRenewalsRepository repo) : ITool
     }
 }
 
+/// <summary>family.renewals.mark_renewed — the ack action for a renewal reminder ("✅ Odnowione").</summary>
+public sealed class MarkRenewedTool(IRenewalsRepository repo) : ITool
+{
+    public string ToolId => "family.renewals.mark_renewed";
+    public bool HasSideEffects => true;
+    public ScopeRequirement RequiredScope => new(ContextScope.Group, MemberRole.Member);
+    public JsonSchema InputSchema => new JsonSchemaBuilder().Type(SchemaValueType.Object)
+        .Properties(("renewalId", new JsonSchemaBuilder().Type(SchemaValueType.String)))
+        .Required("renewalId").Build();
+
+    public async Task<ToolResult> ExecuteAsync(ToolInput input, ExecutionContext ctx, CancellationToken ct)
+    {
+        if (!Guid.TryParse(input.Arguments.GetProperty("renewalId").GetString(), out var id))
+            return new ToolResult(ToolResultStatus.Failed, null, "bad id", "❓ Nieprawidłowe przypomnienie.");
+        var ok = await repo.MarkRenewedAsync(id, ct);
+        return new ToolResult(ToolResultStatus.Success, null, null,
+            ok ? "✅ Oznaczono jako odnowione." : "Było już oznaczone.");
+    }
+}
+
 public sealed class UpcomingRenewalsProvider(IRenewalsRepository repo) : IContextProvider
 {
     public string ProviderId => "group.renewals";

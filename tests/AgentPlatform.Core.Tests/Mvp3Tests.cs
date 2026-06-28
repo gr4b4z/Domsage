@@ -25,15 +25,19 @@ file sealed class StubPaymentsRepo(List<Payment> payments) : IPaymentsRepository
     public Task<bool> MarkPaidAsync(Guid id, Guid u, string k, CancellationToken ct) => Task.FromResult(true);
     public Task<IReadOnlyList<Payment>> ListDueAsync(Guid g, CancellationToken ct) => Task.FromResult<IReadOnlyList<Payment>>([]);
     public Task<IReadOnlyList<Payment>> ListAllAsync(Guid g, CancellationToken ct) => Task.FromResult<IReadOnlyList<Payment>>(payments);
+    public Task<IReadOnlyList<Payment>> DueForReminderAsync(Guid g, CancellationToken ct) => Task.FromResult<IReadOnlyList<Payment>>([]);
+    public Task<IReadOnlyList<Payment>> DueForEscalationAsync(Guid g, TimeSpan w, CancellationToken ct) => Task.FromResult<IReadOnlyList<Payment>>([]);
+    public Task MarkRemindedAsync(Guid id, CancellationToken ct) => Task.CompletedTask;
+    public Task MarkEscalatedAsync(Guid id, CancellationToken ct) => Task.CompletedTask;
 }
 
 file sealed class StubUserRepo(string? email) : IUserRepository
 {
-    public Task<UserGroupInfo?> GetByTelegramIdAsync(long t, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
-    public Task<UserGroupInfo?> GetBySignalNumberAsync(string p, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
+    public Task<UserGroupInfo?> GetByChannelIdentityAsync(string c, string e, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
     public Task<UserGroupInfo?> GetByEmailAsync(string e, CancellationToken ct) =>
         Task.FromResult(e == email ? new UserGroupInfo("u1", "g1", "household", MemberRole.Member, "Test") : null);
     public Task<UserGroupInfo?> GetPrimaryGroupAsync(string u, CancellationToken ct) => Task.FromResult<UserGroupInfo?>(null);
+    public Task<bool> SetChannelIdentityAsync(string u, string c, string e, CancellationToken ct) => Task.FromResult(false);
 }
 
 public class InvoiceExtractToolTests

@@ -40,4 +40,8 @@ public sealed class InMemorySseHub : ISseHub
         }
         return Task.CompletedTask;
     }
+
+    // Empty subscriber sets are removed on unsubscribe, so a present non-empty key means a live connection.
+    public bool IsConnected(string userId) =>
+        _subs.TryGetValue(userId, out var s) && !s.IsEmpty;
 }

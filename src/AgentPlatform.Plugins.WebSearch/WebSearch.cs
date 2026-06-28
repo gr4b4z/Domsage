@@ -94,8 +94,19 @@ public sealed class WebSearchTool(IWebSearchProvider provider) : ITool
     {
         var query = input.Arguments.GetProperty("query").GetString()!;
         var max = input.Arguments.TryGetProperty("maxResults", out var n) ? n.GetInt32() : 5;
-        var results = await provider.SearchAsync(query, max, ct);
-        return new ToolResult(ToolResultStatus.Success, JsonSerializer.SerializeToElement(results), null);
+        try
+        {
+            var results = await provider.SearchAsync(query, max, ct);
+            return new ToolResult(ToolResultStatus.Success, JsonSerializer.SerializeToElement(results), null);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            // The search backend (SearXNG/Brave) is unreachable/misconfigured — degrade gracefully
+            // instead of crashing the whole request with a raw HttpRequestException.
+            return new ToolResult(ToolResultStatus.Failed, null, $"web search failed: {ex.Message}",
+                "🌐 Nie mogę teraz przeszukać internetu — wyszukiwarka jest niedostępna.");
+        }
     }
 }
 
@@ -104,7 +115,7 @@ public sealed class AnswerQuestionHandler : IIntentHandler
     public string IntentId => "web.answer_question";
     public PlannerMode Mode => PlannerMode.ToolCalling;
     public string[] RequiredContextProviders => ["conversation.history"];
-    public string[] AllowedTools => ["web.search", "today.payments", "group.renewals"];
+    public string[] AllowedTools => ["web.search"];
     public string PromptTemplateId => "answer_question";
     public ModelTier PreferredTier => ModelTier.Large;
     public ConfirmationPolicy Confirmation => ConfirmationPolicy.NotRequired;

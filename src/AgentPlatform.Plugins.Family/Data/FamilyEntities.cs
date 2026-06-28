@@ -20,6 +20,9 @@ public class Payment
     public decimal? Confidence { get; set; }
     public string? ExtractedRaw { get; set; }
     public string? Notes { get; set; }
+    public int LeadDays { get; set; } = 3;                  // remind this many days before due
+    public DateTimeOffset? RemindedAt { get; set; }         // first reminder sent
+    public DateTimeOffset? EscalatedAt { get; set; }        // escalation (re-broadcast) sent
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
