@@ -188,6 +188,29 @@ public class AutomationRuleEntity
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>
+/// An external account a user connected via OAuth (Google, Microsoft, …) — the credential cousin of
+/// <see cref="ChannelIdentity"/>. Tokens are stored encrypted at rest. One row per (user, provider).
+/// Generic on purpose: the provider plugin owns the flow, this table just holds the result.
+/// </summary>
+[Table("connected_accounts")]
+public class ConnectedAccountEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public string Provider { get; set; } = "";
+    /// <summary>Encrypted refresh token (long-lived).</summary>
+    public string RefreshTokenEnc { get; set; } = "";
+    /// <summary>Encrypted access token (short-lived cache).</summary>
+    public string? AccessTokenEnc { get; set; }
+    public DateTimeOffset? AccessExpiresAt { get; set; }
+    public string Scopes { get; set; } = "";
+    /// <summary>The account's own email/identifier, for display ("connected as …").</summary>
+    public string? AccountEmail { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 [Table("pending_confirmations")]
 public class PendingConfirmationEntity
 {

@@ -226,6 +226,8 @@ plus <i>incident-triage</i> (ToolCalling) and <i>deployment-approval</i> handler
 | **Weather** | `weather.current` | Current conditions via Open-Meteo (free, no API key). A textbook self-contained plugin — own project, zero core changes. |
 | **Automation** | `automation.create`, `/automations` | Natural-language **if-this-then-that** rules. Sits on a generic engine: *schedule → run a read-only tool → deterministic condition → notify*. The LLM authors a rule once (you confirm it); the recurring check runs **with no LLM** (≈ free). One rule type, any check tool. |
 | **Skills** | folder-based intents (`skill.*`) | **Runtime, no-code extensions.** Drop a `skill.json` + `prompt.txt` folder into `~/.agentplatform/skills/` and it becomes a new intent at startup — *routing + a prompt + an allow-list of existing tools*. No recompile, **no shell, no arbitrary code**; the trust boundary, budget and confirmation still apply. See [`skills/`](skills/). |
+| **Calendar** | `calendar.add_event`, `calendar.agenda` | Adds events to the user's **own** Google Calendar and invites family (attendees + email invites); reads the agenda ("co mam jutro?"). **Provider-agnostic** (`ICalendarBackend`) — Outlook is a drop-in second backend. |
+| **Google** | OAuth account layer | Shared, reusable **Google sign-in** (`/connect-google`) — one consent, incremental scopes, refresh-token handling, tokens encrypted at rest. Calendar uses it now; Gmail/Drive could reuse it. Built on generic `IOAuthTokenProvider` / `IOAuthCallbackHandler` + the core `connected_accounts` table. |
 
 ---
 
@@ -268,7 +270,13 @@ User config lives in `~/.agentplatform/config.json` (outside the repo, never com
   "Llm": { "ProviderId": "azure-openai", "Endpoint": "…", "ApiKey": "…",
            "Models": { "Small": "gpt-5-mini", "Medium": "gpt-5-mini", "Large": "gpt-5-mini" } },
   "Telegram": { "BotToken": "…", "BotUsername": "mybot", "UsePolling": true },
-  "Plugins": { "WebSearch": { "Enabled": false } }
+  "Plugins": {
+    "WebSearch": { "Enabled": false },
+    "Weather": { "DefaultLocation": "Warszawa" },
+    "Google": { "ClientId": "…apps.googleusercontent.com", "ClientSecret": "…",
+                "RedirectUri": "http://localhost:8080/oauth/google/callback",
+                "EncryptionKey": "<base64 32 bytes>" }
+  }
 }
 ```
 
@@ -276,6 +284,10 @@ User config lives in `~/.agentplatform/config.json` (outside the repo, never com
   `max_completion_tokens`, omits unsupported `temperature`).
 - **Telegram**: `UsePolling: true` for local dev; set `UsePolling: false` + `WebhookUrl` for production.
 - **WebSearch** is off by default — turn it on only with a real backend.
+- **Google Calendar**: create an OAuth client + enable the Calendar API, add the
+  `calendar.events` scope to the consent screen, and set publishing status to **In production**
+  (else refresh tokens expire after 7 days). Then each user runs `/connect-google`. Tokens are
+  encrypted at rest with `EncryptionKey` (`openssl rand -base64 32`).
 
 ---
 
@@ -296,7 +308,7 @@ sdk/AgentPlatform.PluginSdk     # all extension contracts — the single source 
 src/AgentPlatform.Core          # the pipeline, registry, trust boundary, budget, scheduling
 src/AgentPlatform.Infrastructure# EF Core, repos, RLS interceptor, LLM provider, Hangfire, SSE
 src/AgentPlatform.Api           # composition root + minimal APIs + web chat
-src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation, Skills
+src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation, Skills, Google, Calendar
 skills/                         # example folder-based skills (no-code, loaded at runtime)
 src-tools/AgentPlatform.Setup   # CLI: guided setup + account linking
 tests/                          # Core (unit), Integration (Testcontainers), Eval (golden set), e2e
@@ -327,6 +339,7 @@ tool **idempotency**, and full-text search. `tests/e2e/FLOWS.md` documents every
 - [x] **MVP5** — Business plugins (proof of the extension model)
 - [x] **Automations** — generic conditional IFTTT engine (schedule → check → condition → notify)
 - [x] **Skills** — runtime, no-code extensions loaded from `~/.agentplatform/skills` folders
+- [x] **Calendar** — Google Calendar (add/read) on a shared, provider-agnostic OAuth layer (Outlook-ready)
 - [ ] Plugin marketplace / external **DLL** loading from `~/.agentplatform/plugins` (compiled plugins at runtime)
 - [ ] More channels & domains (community plugins welcome)
 

@@ -63,10 +63,15 @@ new AgentPlatform.Plugins.Automation.AutomationPluginRegistration()
     .Register(builder.Services, builder.Configuration.GetSection("Plugins:Automation"));
 // 5f. Folder-based skills — runtime, no-code extensions (manifest + prompt + allow-list of existing tools).
 builder.Services.AddSkills(builder.Configuration);
+// 5g. Google account/OAuth (shared) + Calendar capability (provider-agnostic; Google backend now, Outlook later).
+new AgentPlatform.Plugins.Google.GooglePluginRegistration()
+    .Register(builder.Services, builder.Configuration.GetSection("Plugins:Google"));
+new AgentPlatform.Plugins.Calendar.CalendarPluginRegistration()
+    .Register(builder.Services, builder.Configuration.GetSection("Plugins:Calendar"));
 
 // Known plugin namespaces for contract validation.
 builder.Services.AddSingleton(new PluginNamespaces(
-    ["family", "web", "workspace", "telegram", "weather", "automation", "skill"]));
+    ["family", "web", "workspace", "telegram", "weather", "automation", "skill", "google", "calendar"]));
 
 // 6. Scheduler (Hangfire)
 var connStr = builder.Configuration.GetConnectionString("Postgres")
@@ -155,6 +160,21 @@ foreach (var wh in app.Services.GetServices<IWebhookHandler>())
         return res.Body is null ? Results.StatusCode(res.StatusCode) : Results.Content(res.Body, statusCode: res.StatusCode);
     });
 }
+
+// Plugin-owned OAuth redirect endpoints: each IOAuthCallbackHandler maps GET /oauth/{provider}/callback.
+// The host stays generic — it knows nothing about Google/Microsoft; the plugin validates state + swaps the code.
+using (var oauthScope = app.Services.CreateScope())
+    foreach (var providerId in oauthScope.ServiceProvider.GetServices<IOAuthCallbackHandler>().Select(h => h.Provider).Distinct())
+    {
+        var pid = providerId;
+        app.MapGet($"/oauth/{pid}/callback", async (HttpContext ctx, CancellationToken ct) =>
+        {
+            var handler = ctx.RequestServices.GetServices<IOAuthCallbackHandler>().First(h => h.Provider == pid);
+            var query = ctx.Request.Query.ToDictionary(q => q.Key, q => q.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+            var res = await handler.HandleAsync(query, ct);
+            return Results.Content(res.Html, "text/html; charset=utf-8", statusCode: res.StatusCode);
+        });
+    }
 
 // Server-Sent Events — live web-chat updates (shopping notifications, etc.)
 app.MapGet("/api/stream", async (HttpContext ctx, UserTokenAuthenticator auth,

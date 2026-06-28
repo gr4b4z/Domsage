@@ -11,8 +11,10 @@
     <Project Path="src/AgentPlatform.Infrastructure/AgentPlatform.Infrastructure.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Automation/AgentPlatform.Plugins.Automation.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Business/AgentPlatform.Plugins.Business.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Calendar/AgentPlatform.Plugins.Calendar.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Email/AgentPlatform.Plugins.Email.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Family/AgentPlatform.Plugins.Family.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Google/AgentPlatform.Plugins.Google.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Http/AgentPlatform.Plugins.Http.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Signal/AgentPlatform.Plugins.Signal.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Skills/AgentPlatform.Plugins.Skills.csproj" />

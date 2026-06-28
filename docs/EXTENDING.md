@@ -30,6 +30,7 @@ A plugin can contribute any combination of:
 | Add a messaging surface (chat app) | `IChannelPlugin` |
 | Run something on a schedule | `IScheduledJob` |
 | Expose a public HTTP endpoint (webhook) | `IWebhookHandler` |
+| Connect a user's external account via OAuth | `IOAuthTokenProvider` + `IOAuthCallbackHandler` |
 | Add a deterministic chat command (`/foo`) | `ISlashCommand` |
 | Ship a web UI inside the DLL | `IPluginUi` |
 | Define a new kind of group + roles | `IGroupTypeProvider` |
@@ -172,6 +173,35 @@ public sealed class StripeWebhookHandler(IMessageBus bus) : IWebhookHandler
     }
 }
 ```
+
+### `IOAuthTokenProvider` + `IOAuthCallbackHandler` — connect an external account
+
+For capabilities that call a third-party API on the user's behalf (Google, Microsoft, …), split **auth**
+from **capability**:
+
+```csharp
+// In the provider plugin (e.g. Google): owns consent, token storage (encrypted) + refresh.
+public sealed class GoogleTokenProvider(/* store, oauth */) : IOAuthTokenProvider
+{
+    public string Provider => "google";
+    public Task<bool> IsConnectedAsync(string userId, CancellationToken ct) => /* … */;
+    public Task<string?> GetAccessTokenAsync(string userId, CancellationToken ct) => /* refresh if needed */;
+}
+
+// The redirect target — the host maps GET /oauth/google/callback generically.
+public sealed class GoogleCallbackHandler(/* … */) : IOAuthCallbackHandler
+{
+    public string Provider => "google";
+    public Task<OAuthCallbackResult> HandleAsync(IReadOnlyDictionary<string,string> query, CancellationToken ct)
+        => /* validate state, swap code → tokens, store, return an HTML page */;
+}
+```
+
+Tokens persist in the core `connected_accounts` table (one row per user+provider, encrypted at rest).
+A **capability** plugin (e.g. Calendar) depends only on `IOAuthTokenProvider` — never on a specific
+provider — so it stays provider-agnostic (one tool, multiple backends). A `/connect-<provider>`
+`ISlashCommand` mints the consent link. This is how Calendar works: `ICalendarBackend` with a Google
+backend now and an Outlook backend later, both behind the same OAuth seams.
 
 ### `IPluginUi` — a web UI inside your DLL
 

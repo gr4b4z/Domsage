@@ -12,6 +12,8 @@
     <ProjectReference Include="..\AgentPlatform.Plugins.Weather\AgentPlatform.Plugins.Weather.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Automation\AgentPlatform.Plugins.Automation.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Skills\AgentPlatform.Plugins.Skills.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Google\AgentPlatform.Plugins.Google.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Calendar\AgentPlatform.Plugins.Calendar.csproj" />
   </ItemGroup>
 
   <ItemGroup>

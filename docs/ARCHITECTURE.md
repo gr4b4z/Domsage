@@ -234,6 +234,15 @@ compare. The decision is grounded in data and a threshold, never a model's per-r
 with *"AI is never the source of truth."* Any read-only tool is automatically a valid check; weather is
 just the first.
 
+### Connected accounts (OAuth)
+External accounts a user authorizes (Google now; Microsoft later) live in the core `connected_accounts`
+table — the credential cousin of `channel_identities`, one row per (user, provider), **tokens encrypted
+at rest** (AES-GCM). A provider plugin owns its flow and exposes two generic seams: `IOAuthTokenProvider`
+(hand me a valid access token, refreshing transparently) and `IOAuthCallbackHandler` (the host maps
+`GET /oauth/{provider}/callback` generically — it knows nothing about Google). Capability plugins depend
+only on the abstraction: the **Calendar** plugin's `ICalendarBackend` has a Google backend today and an
+Outlook backend drops in later against the same `CalendarEvent` model and the same OAuth seams.
+
 ### Conversation & memory
 Conversations are persisted with summaries; semantic memory (pgvector) and full-text history search let
 the assistant recall facts and past actions across sessions.
@@ -251,6 +260,7 @@ the assistant recall facts and past actions across sessions.
 - **Folder skills** (`~/.agentplatform/skills/`) → parsed at startup into `IIntentHandler`s + prompts
   (namespace `skill.*`), so a new capability can ship as a folder (manifest + prompt + tool allow-list)
   with no recompilation — while still passing through the trust boundary, budget and confirmation.
+- `IOAuthCallbackHandler` → each `Provider` mapped as `GET /oauth/{provider}/callback` (OAuth redirects).
 - Plugin namespaces validated against tool/intent ids (contract enforcement).
 
 The host references **no plugin type** for any of these mechanisms — adding a plugin requires zero changes
