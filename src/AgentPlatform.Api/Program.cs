@@ -15,6 +15,7 @@ using AgentPlatform.Plugins.Email;
 using AgentPlatform.Plugins.Email.DI;
 using AgentPlatform.Plugins.Http.DI;
 using AgentPlatform.Plugins.Signal.DI;
+using AgentPlatform.Plugins.Skills;
 using AgentPlatform.Plugins.Telegram;
 using AgentPlatform.Plugins.Telegram.DI;
 using AgentPlatform.PluginSdk.Contracts;
@@ -60,10 +61,12 @@ new AgentPlatform.Plugins.Weather.WeatherPluginRegistration()
 // 5e. Automation — NL rule authoring on top of the generic automation engine (in Infrastructure).
 new AgentPlatform.Plugins.Automation.AutomationPluginRegistration()
     .Register(builder.Services, builder.Configuration.GetSection("Plugins:Automation"));
+// 5f. Folder-based skills — runtime, no-code extensions (manifest + prompt + allow-list of existing tools).
+builder.Services.AddSkills(builder.Configuration);
 
 // Known plugin namespaces for contract validation.
 builder.Services.AddSingleton(new PluginNamespaces(
-    ["family", "web", "workspace", "telegram", "weather", "automation"]));
+    ["family", "web", "workspace", "telegram", "weather", "automation", "skill"]));
 
 // 6. Scheduler (Hangfire)
 var connStr = builder.Configuration.GetConnectionString("Postgres")
@@ -101,6 +104,12 @@ foreach (var ns in app.Services.GetRequiredService<PluginNamespaces>().Namespace
     registry.Namespaces.Add(ns);
 using (var validateScope = app.Services.CreateScope())
     registry.ValidateContracts(validateScope.ServiceProvider);
+
+// Surface folder-based skills loaded this run (the no-code extension path).
+var skillCatalog = app.Services.GetRequiredService<AgentPlatform.Plugins.Skills.SkillCatalog>();
+if (skillCatalog.Skills.Count > 0)
+    app.Logger.LogInformation("Loaded {Count} skill(s): {Ids}",
+        skillCatalog.Skills.Count, string.Join(", ", skillCatalog.Skills.Select(s => s.IntentId)));
 
 // Recurring jobs — discovered generically from any plugin's IScheduledJob. The host has no
 // knowledge of specific plugins; each job (id + cron + work) ships in its plugin DLL.

@@ -15,6 +15,7 @@
     <Project Path="src/AgentPlatform.Plugins.Family/AgentPlatform.Plugins.Family.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Http/AgentPlatform.Plugins.Http.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Signal/AgentPlatform.Plugins.Signal.csproj" />
+    <Project Path="src/AgentPlatform.Plugins.Skills/AgentPlatform.Plugins.Skills.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Telegram/AgentPlatform.Plugins.Telegram.csproj" />
     <Project Path="src/AgentPlatform.Plugins.WebSearch/AgentPlatform.Plugins.WebSearch.csproj" />
     <Project Path="src/AgentPlatform.Plugins.Weather/AgentPlatform.Plugins.Weather.csproj" />

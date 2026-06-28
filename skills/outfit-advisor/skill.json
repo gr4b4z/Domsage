@@ -1,0 +1,9 @@
+{
+  "id": "outfit-advisor",
+  "description": "doradza co na siebie założyć na podstawie pogody ('jak się ubrać', 'co założyć na dwór', 'czy brać kurtkę/parasol')",
+  "mode": "ContextFirst",
+  "allowedTools": ["weather.current"],
+  "confirmation": "NotRequired",
+  "tier": "Small",
+  "phraseResult": true
+}

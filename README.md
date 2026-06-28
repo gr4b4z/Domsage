@@ -225,13 +225,17 @@ plus <i>incident-triage</i> (ToolCalling) and <i>deployment-approval</i> handler
 | **WebSearch** | `web.search`, `web.answer_question` | Opt-in (`Plugins:WebSearch:Enabled`). Backends: SearXNG or Brave. When off, general questions are answered from the model's own knowledge. |
 | **Weather** | `weather.current` | Current conditions via Open-Meteo (free, no API key). A textbook self-contained plugin — own project, zero core changes. |
 | **Automation** | `automation.create`, `/automations` | Natural-language **if-this-then-that** rules. Sits on a generic engine: *schedule → run a read-only tool → deterministic condition → notify*. The LLM authors a rule once (you confirm it); the recurring check runs **with no LLM** (≈ free). One rule type, any check tool. |
+| **Skills** | folder-based intents (`skill.*`) | **Runtime, no-code extensions.** Drop a `skill.json` + `prompt.txt` folder into `~/.agentplatform/skills/` and it becomes a new intent at startup — *routing + a prompt + an allow-list of existing tools*. No recompile, **no shell, no arbitrary code**; the trust boundary, budget and confirmation still apply. See [`skills/`](skills/). |
 
 ---
 
 ## Extending it
 
-The core is **closed for modification, open for extension**. A plugin is a single assembly that can
-contribute any of these — discovered generically at startup, **no host changes**:
+Two ways to extend, sharing the same safe pipeline:
+- **Compiled plugins** — a .NET assembly contributing the contracts below (full power: new tools, DB schemas, channels).
+- **Folder skills** — a `skill.json` + `prompt.txt` folder loaded at runtime, **no recompilation** (routing + prompt over *existing* tools). See [`skills/`](skills/).
+
+A plugin is a single assembly that can contribute any of these — discovered generically at startup, **no host changes**:
 
 | Contract | Add this to… |
 |---|---|
@@ -292,7 +296,8 @@ sdk/AgentPlatform.PluginSdk     # all extension contracts — the single source 
 src/AgentPlatform.Core          # the pipeline, registry, trust boundary, budget, scheduling
 src/AgentPlatform.Infrastructure# EF Core, repos, RLS interceptor, LLM provider, Hangfire, SSE
 src/AgentPlatform.Api           # composition root + minimal APIs + web chat
-src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation
+src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation, Skills
+skills/                         # example folder-based skills (no-code, loaded at runtime)
 src-tools/AgentPlatform.Setup   # CLI: guided setup + account linking
 tests/                          # Core (unit), Integration (Testcontainers), Eval (golden set), e2e
 ```
@@ -321,7 +326,8 @@ tool **idempotency**, and full-text search. `tests/e2e/FLOWS.md` documents every
 - [x] **MVP4** — History search & memory
 - [x] **MVP5** — Business plugins (proof of the extension model)
 - [x] **Automations** — generic conditional IFTTT engine (schedule → check → condition → notify)
-- [ ] Plugin marketplace / external DLL loading from `~/.agentplatform/plugins`
+- [x] **Skills** — runtime, no-code extensions loaded from `~/.agentplatform/skills` folders
+- [ ] Plugin marketplace / external **DLL** loading from `~/.agentplatform/plugins` (compiled plugins at runtime)
 - [ ] More channels & domains (community plugins welcome)
 
 ---

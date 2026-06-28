@@ -248,6 +248,9 @@ the assistant recall facts and past actions across sessions.
 - `IScheduledJob` → registered with Hangfire by a generic `ScheduledJobRunner` (dispatch by id).
 - `IPluginUi` → embedded `wwwroot` served at `/plugins/{id}/…`.
 - `IWebhookHandler` → each `Route` mapped as a POST endpoint.
+- **Folder skills** (`~/.agentplatform/skills/`) → parsed at startup into `IIntentHandler`s + prompts
+  (namespace `skill.*`), so a new capability can ship as a folder (manifest + prompt + tool allow-list)
+  with no recompilation — while still passing through the trust boundary, budget and confirmation.
 - Plugin namespaces validated against tool/intent ids (contract enforcement).
 
 The host references **no plugin type** for any of these mechanisms — adding a plugin requires zero changes

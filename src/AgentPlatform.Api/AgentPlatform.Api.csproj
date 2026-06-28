@@ -11,6 +11,7 @@
     <ProjectReference Include="..\AgentPlatform.Plugins.Business\AgentPlatform.Plugins.Business.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Weather\AgentPlatform.Plugins.Weather.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Automation\AgentPlatform.Plugins.Automation.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Skills\AgentPlatform.Plugins.Skills.csproj" />
   </ItemGroup>
 
   <ItemGroup>

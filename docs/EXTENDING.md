@@ -10,6 +10,14 @@ startup and wires them generically.
 
 ---
 
+## Two ways to extend
+
+- **Compiled plugin** — a .NET assembly (this guide). Full power: new tools, DB schemas, channels, jobs.
+- **Folder skill** — a `skill.json` + `prompt.txt` folder under `~/.agentplatform/skills/`, loaded at
+  startup with **no recompilation**. A skill is *routing + a prompt + an allow-list of existing tools* —
+  no shell, no arbitrary code. Use it to teach a new request type that reuses tools you already have.
+  Jump to [Folder-based skills](#folder-based-skills-no-recompilation).
+
 ## Mental model
 
 A plugin can contribute any combination of:
@@ -254,6 +262,41 @@ public sealed class NotesPluginRegistration : IPluginRegistration
 >     .AddClasses(c => c.AssignableTo<ITool>()).AsImplementedInterfaces().WithScopedLifetime()
 >     .AddClasses(c => c.AssignableTo<IContextProvider>()).AsImplementedInterfaces().WithScopedLifetime());
 > ```
+
+---
+
+## Folder-based skills (no recompilation)
+
+A **skill** is the declarative, runtime-loaded equivalent of an `IIntentHandler` + prompt — no build,
+no DLL. Drop a folder into `~/.agentplatform/skills/<name>/` (or set `Skills:Path`):
+
+```
+~/.agentplatform/skills/outfit-advisor/
+├── skill.json     # the manifest
+└── prompt.txt     # SYSTEM / --- / USER, with {{allowed_tools_json}}, {{user_text}}
+```
+
+```json
+{
+  "id": "outfit-advisor",
+  "description": "what to wear given the weather ('jak się ubrać', 'czy brać kurtkę')",
+  "mode": "ContextFirst",
+  "allowedTools": ["weather.current"],
+  "confirmation": "NotRequired",
+  "tier": "Small",
+  "phraseResult": true
+}
+```
+
+At startup the host registers it as intent **`skill.<id>`** and serves its prompt via a store decorator.
+What a skill **can** do: route a request, run an LLM call, invoke tools from `allowedTools`, and
+(optionally) rephrase the result. What it **cannot** do: run shell, touch the filesystem, define new
+code or reference a tool that doesn't exist. Everything still flows through the same trust boundary,
+idempotency, budget and confirmation as a compiled handler — so a skill grants reach, never new privilege.
+
+Rules: `allowedTools` must reference **already-registered** tools (an unknown tool fails fast at startup
+with a clear contract error). A malformed skill is skipped, never fatal. Use a compiled plugin instead
+when you need a *new* tool, a DB schema, a channel, or a scheduled job.
 
 ---
 
