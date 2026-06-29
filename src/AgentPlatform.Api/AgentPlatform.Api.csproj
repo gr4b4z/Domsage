@@ -7,6 +7,7 @@
     <ProjectReference Include="..\AgentPlatform.Plugins.Http\AgentPlatform.Plugins.Http.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.WebSearch\AgentPlatform.Plugins.WebSearch.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Signal\AgentPlatform.Plugins.Signal.csproj" />
+    <ProjectReference Include="..\AgentPlatform.Plugins.Discord\AgentPlatform.Plugins.Discord.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Email\AgentPlatform.Plugins.Email.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Business\AgentPlatform.Plugins.Business.csproj" />
     <ProjectReference Include="..\AgentPlatform.Plugins.Weather\AgentPlatform.Plugins.Weather.csproj" />

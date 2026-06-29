@@ -14,6 +14,7 @@ using AgentPlatform.Plugins.Http;
 using AgentPlatform.Plugins.Email;
 using AgentPlatform.Plugins.Email.DI;
 using AgentPlatform.Plugins.Http.DI;
+using AgentPlatform.Plugins.Discord.DI;
 using AgentPlatform.Plugins.Signal.DI;
 using AgentPlatform.Plugins.Skills;
 using AgentPlatform.Plugins.Telegram;
@@ -46,6 +47,7 @@ builder.Services.AddLlmProviders(builder.Configuration);
 builder.Services.AddTelegramPlugin(builder.Configuration);
 builder.Services.AddHttpChannelPlugin(builder.Configuration);
 builder.Services.AddSignalPlugin(builder.Configuration);
+builder.Services.AddDiscordPlugin(builder.Configuration);
 builder.Services.AddEmailPlugin(builder.Configuration);
 // 5. Family domain plugins
 builder.Services.AddFamilyPlugins(builder.Configuration);
