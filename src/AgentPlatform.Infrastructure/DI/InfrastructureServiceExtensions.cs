@@ -57,6 +57,7 @@ public static class InfrastructureServiceExtensions
         services.AddSingleton<ISseHub, Notifications.InMemorySseHub>();
         services.AddScoped<IGroupDirectory, Notifications.GroupDirectory>();
         services.AddScoped<INotificationService, Notifications.NotificationService>();
+        services.Configure<Notifications.NotificationOptions>(config.GetSection("Notifications"));
 
         return services;
     }

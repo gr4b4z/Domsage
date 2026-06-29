@@ -16,9 +16,13 @@ namespace AgentPlatform.Infrastructure.Notifications;
 /// Scoped. Never throws to the caller.
 /// </summary>
 public sealed class NotificationService(
-    AppDbContext db, ISseHub sse, PluginRegistry registry, ILogger<NotificationService> log)
+    AppDbContext db, ISseHub sse, PluginRegistry registry,
+    Microsoft.Extensions.Options.IOptions<NotificationOptions> options,
+    ILogger<NotificationService> log)
     : INotificationService
 {
+    private readonly NotificationOptions _options = options.Value;
+
     public async Task NotifyUsersAsync(IEnumerable<string> userIds, LiveEvent evt, CancellationToken ct)
     {
         var ids = userIds.Select(u => Guid.TryParse(u, out var g) ? g : (Guid?)null)
@@ -43,16 +47,15 @@ public sealed class NotificationService(
             // Resolve outbound targets from the user's channel identities. A user may have several
             // emails — pick the primary (falling back to any).
             var chans = identities.GetValueOrDefault(u.Id) ?? [];
-            var tg = chans.FirstOrDefault(c => c.ChannelId == "telegram")?.ExternalId;
-            var sig = chans.FirstOrDefault(c => c.ChannelId == "signal")?.ExternalId;
+            // Generic, priority-driven push selection (telegram>signal>… by config; new channels zero-touch).
+            var push = ChannelRouting.SelectPushChannel(chans, _options.ChannelPriority);
             var primaryEmail = (chans.FirstOrDefault(c => c.ChannelId == "email" && c.IsPrimary)
                                 ?? chans.FirstOrDefault(c => c.ChannelId == "email"))?.ExternalId;
-            var hasMessaging = tg is not null || sig is not null;
+            var hasMessaging = push is not null;
 
             try
             {
-                if (tg is not null) await Deliver("telegram", tg, evt, ct);
-                else if (sig is not null) await Deliver("signal", sig, evt, ct);
+                if (push is { } p) await Deliver(p.ChannelId, p.ExternalId, evt, ct);
             }
             catch (Exception ex) { log.LogWarning(ex, "Channel push failed for {User}", u.Id); }
 
