@@ -214,9 +214,11 @@ NodaTime (rules + zone stored, not a fixed UTC instant). Plugins declare recurri
 `IScheduledJob` (e.g. `family.reminder-scan` hourly, `email.imap-poll`).
 
 ### Notifications
-`INotificationService` delivers along a chain: **live SSE** (web chat) → **messaging channel**
-(Telegram/Signal, resolved via generic `channel_identities`) → **email fallback**. A per-user
-`notify_mode` (`auto` / `email` / `silent`) tunes it. Notifications can carry a **tap-to-confirm action**
+`INotificationService` delivers along a chain: **live SSE** (web chat) → **messaging channel** → **email
+fallback**. The messaging target is picked by a pure, config-driven `ChannelRouting.SelectPushChannel`
+over the user's `channel_identities` in `Notifications:ChannelPriority` order (default
+telegram>signal>discord; unlisted channels still reachable) — so a new channel (e.g. Discord) is
+zero-touch, no edit to the notifier. A per-user `notify_mode` (`auto` / `email` / `silent`) tunes it. Notifications can carry a **tap-to-confirm action**
 (a tool id + input) so a reminder's "✅ Zapłacone" button runs a deterministic tool.
 
 ### Automations (conditional, deterministic)

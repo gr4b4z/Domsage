@@ -214,6 +214,7 @@ plus <i>incident-triage</i> (ToolCalling) and <i>deployment-approval</i> handler
 |---|---|---|---|
 | **Web chat** | `http` | sync HTTP + SSE | Built-in Alpine.js/Tailwind UI with live updates & tap-to-confirm |
 | **Telegram** | `telegram` | polling **or** webhook | Long-poll for local dev (no public URL), webhook for prod; in-chat account linking |
+| **Discord** | `discord` | Gateway (WebSocket) | DM 1:1 (Discord.Net); `/start <code>` linking; text-only. Gated off without a bot token |
 | **Signal** | `signal` | webhook | via `signal-cli-rest-api` |
 | **Email** | `email` | IMAP poll | Reply-to-confirm; SMTP delivery |
 | **Teams** | `teams` | (Business plugin) | Workspace channel |
@@ -270,9 +271,11 @@ User config lives in `~/.agentplatform/config.json` (outside the repo, never com
   "Llm": { "ProviderId": "azure-openai", "Endpoint": "…", "ApiKey": "…",
            "Models": { "Small": "gpt-5-mini", "Medium": "gpt-5-mini", "Large": "gpt-5-mini" } },
   "Telegram": { "BotToken": "…", "BotUsername": "mybot", "UsePolling": true },
+  "Notifications": { "ChannelPriority": ["telegram", "signal", "discord"] },
   "Plugins": {
     "WebSearch": { "Enabled": false },
     "Weather": { "DefaultLocation": "Warszawa" },
+    "Discord": { "BotToken": "…" },
     "Google": { "ClientId": "…apps.googleusercontent.com", "ClientSecret": "…",
                 "RedirectUri": "http://localhost:8080/oauth/google/callback",
                 "EncryptionKey": "<base64 32 bytes>" }
@@ -283,6 +286,8 @@ User config lives in `~/.agentplatform/config.json` (outside the repo, never com
 - **LLM** is OpenAI-compatible; reasoning models (gpt-5*/o*) are auto-detected (uses
   `max_completion_tokens`, omits unsupported `temperature`).
 - **Telegram**: `UsePolling: true` for local dev; set `UsePolling: false` + `WebhookUrl` for production.
+- **Discord**: set `Plugins:Discord:BotToken` and enable the *Message Content* intent in the Developer Portal; users link with `/connect-discord` then DM `/start <code>`. Gated off when no token.
+- **Notifications**: `ChannelPriority` is the push order — the first messaging channel a user has wins (email stays the last-resort fallback); a new channel works without code changes.
 - **WebSearch** is off by default — turn it on only with a real backend.
 - **Google Calendar**: create an OAuth client + enable the Calendar API, add the
   `calendar.events` scope to the consent screen, and set publishing status to **In production**
@@ -308,7 +313,7 @@ sdk/AgentPlatform.PluginSdk     # all extension contracts — the single source 
 src/AgentPlatform.Core          # the pipeline, registry, trust boundary, budget, scheduling
 src/AgentPlatform.Infrastructure# EF Core, repos, RLS interceptor, LLM provider, Hangfire, SSE
 src/AgentPlatform.Api           # composition root + minimal APIs + web chat
-src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Signal, Email, Http, WebSearch, Weather, Automation, Skills, Google, Calendar
+src/AgentPlatform.Plugins.*     # Family, Business, Telegram, Discord, Signal, Email, Http, WebSearch, Weather, Automation, Skills, Google, Calendar
 skills/                         # example folder-based skills (no-code, loaded at runtime)
 src-tools/AgentPlatform.Setup   # CLI: guided setup + account linking
 tests/                          # Core (unit), Integration (Testcontainers), Eval (golden set), e2e
