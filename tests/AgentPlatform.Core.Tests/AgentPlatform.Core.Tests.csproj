@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\AgentPlatform.Plugins.Google\AgentPlatform.Plugins.Google.csproj" />
     <ProjectReference Include="..\..\src\AgentPlatform.Plugins.Calendar\AgentPlatform.Plugins.Calendar.csproj" />
     <ProjectReference Include="..\..\src\AgentPlatform.Plugins.Discord\AgentPlatform.Plugins.Discord.csproj" />
+    <ProjectReference Include="..\..\src-tools\AgentPlatform.Setup\AgentPlatform.Setup.csproj" />
   </ItemGroup>
 
 </Project>
