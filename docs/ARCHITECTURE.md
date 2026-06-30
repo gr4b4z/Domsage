@@ -249,6 +249,19 @@ Outlook backend drops in later against the same `CalendarEvent` model and the sa
 Conversations are persisted with summaries; semantic memory (pgvector) and full-text history search let
 the assistant recall facts and past actions across sessions.
 
+### Setup CLI (schema-driven config)
+`src-tools/AgentPlatform.Setup` is a standalone CLI (publishable as a self-contained single-file binary,
+no .NET SDK required) for day-0 config. Beyond first-run setup and account linking, `agent configure
+[plugin]` is a **schema-driven** wizard: it globs `*.config-schema.json` files from
+`~/.agentplatform/plugins/` (override with `AGENTPLATFORM_PLUGINS_FOLDER`), so a plugin becomes
+configurable by *dropping its schema file in the folder* — no CLI recompilation, mirroring the
+no-recompile story of folder skills. The schema declares an ordered, flat list of fields (label, hint,
+secret-mask, required, optional named validation hook); the wizard reads existing values from
+`config.json` as defaults, runs any validation hook (`imap-ping`/`smtp-ping`, **non-blocking** —
+failure offers `[R]e-enter / [C]ontinue anyway`), and persists via the shared, read-overwrite
+`ConfigureMerge.Apply` (the same primitive the first-run `SetupWizard` uses for plugin sections). The CLI
+never loads plugin code; config changes require an API restart.
+
 ---
 
 ## Composition root

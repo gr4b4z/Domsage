@@ -10,6 +10,16 @@ if (args.Length > 0 && args[0] is "connect-telegram" or "link-telegram" or "link
 if (args.Length > 0 && args[0] is "connect-email" or "link-email")
     return await EmailLinkCommand.RunAsync(configPath, args);
 
+// Schema-driven plugin config wizard: `agent configure [plugin]`.
+if (args.Length > 0 && args[0] is "configure")
+{
+    var pluginsFolder = Environment.GetEnvironmentVariable("AGENTPLATFORM_PLUGINS_FOLDER")
+        ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".agentplatform", "plugins");
+    return await ConfigureCommand.RunAsync(configPath, pluginsFolder, args);
+}
+
 await SetupWizard.RunAsync(configPath);
 return 0;
 

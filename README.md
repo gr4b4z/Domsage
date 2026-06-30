@@ -131,6 +131,10 @@ dotnet run --project src/AgentPlatform.Api --urls http://localhost:8080
 # guided setup — create the first user + web link
 dotnet run --project src-tools/AgentPlatform.Setup
 
+# guided plugin config — no hand-editing config.json
+dotnet run --project src-tools/AgentPlatform.Setup -- configure          # list configurable plugins
+dotnet run --project src-tools/AgentPlatform.Setup -- configure email    # walk every IMAP/SMTP field
+
 # build the container locally instead of pulling the published one
 docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 

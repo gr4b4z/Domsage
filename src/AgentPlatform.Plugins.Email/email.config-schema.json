@@ -1,0 +1,17 @@
+{
+  "pluginId": "email",
+  "displayName": "Email (IMAP / SMTP)",
+  "configSection": "Email",
+  "fields": [
+    { "key": "ImapHost",     "label": "Serwer IMAP (poczta przychodząca)", "hint": "imap.gmail.com",   "isSecret": false, "required": true },
+    { "key": "ImapPort",     "label": "Port IMAP",                          "hint": "993",              "isSecret": false, "required": true },
+    { "key": "ImapUser",     "label": "Login IMAP (adres email)",           "hint": "",                 "isSecret": false, "required": true },
+    { "key": "ImapPassword", "label": "Hasło IMAP",                         "hint": "",                 "isSecret": true,  "required": true, "validate": "imap-ping" },
+    { "key": "SmtpHost",     "label": "Serwer SMTP (poczta wychodząca)",    "hint": "smtp.gmail.com",   "isSecret": false, "required": true },
+    { "key": "SmtpPort",     "label": "Port SMTP",                          "hint": "587",              "isSecret": false, "required": true },
+    { "key": "SmtpUser",     "label": "Login SMTP (adres email)",           "hint": "",                 "isSecret": false, "required": true },
+    { "key": "SmtpPassword", "label": "Hasło SMTP",                         "hint": "",                 "isSecret": true,  "required": true, "validate": "smtp-ping" },
+    { "key": "FromAddress",  "label": "Adres nadawcy (From)",               "hint": "agent@example.com", "isSecret": false, "required": true },
+    { "key": "FromName",     "label": "Nazwa nadawcy",                      "hint": "Mój Agent",        "isSecret": false, "required": false }
+  ]
+}

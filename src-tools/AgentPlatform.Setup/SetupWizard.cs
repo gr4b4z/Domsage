@@ -40,6 +40,16 @@ public static class SetupWizard
         var json = JsonSerializer.Serialize(config.ToAppsettings(), new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(configPath, json);
 
+        // Plugin sections go through the same read-overwrite merge the `configure` wizard uses.
+        foreach (var bySection in config.PluginConfig
+                     .Select(kv => kv.Key.Split(':', 2))
+                     .Where(parts => parts.Length == 2)
+                     .GroupBy(parts => parts[0]))
+        {
+            var fields = bySection.ToDictionary(parts => parts[1], parts => config.PluginConfig[$"{bySection.Key}:{parts[1]}"]);
+            ConfigureMerge.Apply(configPath, bySection.Key, fields);
+        }
+
         AnsiConsole.MarkupLine($"\n[green]✓[/] Konfiguracja zapisana: {configPath}");
         AnsiConsole.MarkupLine("[grey]Następny krok: docker compose up[/]");
         AnsiConsole.MarkupLine("[grey]Po starcie wywołaj POST /api/setup/init aby utworzyć konto admina.[/]");

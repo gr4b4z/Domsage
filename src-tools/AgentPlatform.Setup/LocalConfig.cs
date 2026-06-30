@@ -16,15 +16,7 @@ public sealed class LocalConfig
 
     public object ToAppsettings()
     {
-        var plugins = new Dictionary<string, Dictionary<string, string>>();
-        foreach (var (key, value) in PluginConfig)
-        {
-            var parts = key.Split(':', 2);
-            if (parts.Length != 2) continue;
-            if (!plugins.TryGetValue(parts[0], out var inner)) plugins[parts[0]] = inner = new();
-            inner[parts[1]] = value;
-        }
-
+        // Plugin sections are written separately via ConfigureMerge.Apply (the shared, tested path).
         return new
         {
             ConnectionStrings = new { Postgres = PostgresConnectionString },
@@ -41,8 +33,7 @@ public sealed class LocalConfig
                 ApiKey = LlmApiKey,
                 Models = new { Small = LlmSmallModel, Medium = LlmSmallModel, Large = LlmLargeModel }
             },
-            BlobStorage = new { Provider = "local", LocalPath = BlobStoragePath },
-            Plugins = plugins
+            BlobStorage = new { Provider = "local", LocalPath = BlobStoragePath }
         };
     }
 }
