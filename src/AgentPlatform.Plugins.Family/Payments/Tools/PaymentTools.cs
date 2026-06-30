@@ -16,8 +16,8 @@ public sealed class CreatePaymentTool(IPaymentsRepository repo) : ITool
     public JsonSchema InputSchema => new JsonSchemaBuilder()
         .Type(SchemaValueType.Object)
         .Properties(
-            ("creditor", new JsonSchemaBuilder().Type(SchemaValueType.String)),
-            ("amount", new JsonSchemaBuilder().Type(SchemaValueType.Number)),
+            ("creditor", new JsonSchemaBuilder().Type(SchemaValueType.String).MinLength(1)),
+            ("amount", new JsonSchemaBuilder().Type(SchemaValueType.Number).ExclusiveMinimum(0)),
             ("currency", new JsonSchemaBuilder().Type(SchemaValueType.String)),
             ("dueDate", new JsonSchemaBuilder().Type(SchemaValueType.String)))
         .Required("creditor", "amount")

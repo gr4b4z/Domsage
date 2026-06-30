@@ -45,6 +45,10 @@ public sealed class IntentRouter(
             "Guidance: prefer the most specific add/create/list/mark intent that matches the words used. " +
             "Only choose an intent about a received or attached document/invoice when the user explicitly " +
             "says they received, forwarded or attached one. For 'what do I have / owe / need' questions, pick a list_* intent. " +
+            "But if the user is asking a clarifying/follow-up question about something just discussed or just " +
+            "created/changed in this conversation (e.g. 'co to za...?', 'skąd to się wzięło?', 'dlaczego?', " +
+            "'nie odpowiedziałeś...'), classify as 'fallback' instead of a list_*/add_*/mark_* intent, so it can " +
+            "be answered conversationally using the context below rather than repeating a generic list. " +
             history +
             "Return ONLY JSON: {\"intents\":[{\"intentId\":\"...\",\"confidence\":0.0-1.0,\"segment\":\"...\"}]}. " +
             "If none fit, return intentId \"fallback\".";
